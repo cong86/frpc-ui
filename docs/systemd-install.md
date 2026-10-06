@@ -2,6 +2,22 @@
 
 支持 Debian/Ubuntu、systemd、amd64/arm64 的原生新安装；不接管已有部署。
 
+## 从零下载安装
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/cong86/frpc-ui/main/scripts/install.sh | sudo bash
+```
+
+root 可直接 `| bash`。入口默认固定 `v0.1.0-preview.1`，可通过 `bash -s -- --version vX.Y.Z` 选择仓库已发布版本；不使用任意镜像或第三方地址。`--verify-only` 仅下载并检查归档，不启动向导。
+
+Console 归档与 SHA256SUMS 从同一 GitHub Release 经 HTTPS 下载，摘要检查用于发现文件损坏或不匹配，不是独立签名证明。归档只允许单个普通 `frp-console` 文件。无终端、缺少依赖、不支持系统/架构或校验失败时停止，不安装系统依赖、不修改已有服务。
+
+向导标准输入重新连接 `/dev/tty`，因此 `curl | bash` 可以正常交互并隐藏输入 Token。每次使用独立私有临时目录，退出清理下载文件；私有计划保留在 `/root/frp-console-install-*.json`（0600），取消仍不安装。管理员在完成安装后首次网页访问设置。
+
+发布流水线由 `.github/release-version` 更新触发，构建两架构归档、SHA256SUMS、install.sh 和 BUILD_INFO；全部上传后才公开预览 Release，不覆盖已发布版本。arm64 仅构建/下载校验，不表示实机运行。
+
+## 已有程序启动向导
+
 ```sh
 sudo ./frp-console install wizard
 ```

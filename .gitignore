@@ -2,6 +2,8 @@
 /web/node_modules/
 /web/dist/
 /bin/
+/dist/
+__pycache__/
 /data/
 *.log
 *.exe

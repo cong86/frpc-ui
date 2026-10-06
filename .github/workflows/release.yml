@@ -1,0 +1,49 @@
+name: Preview release
+on:
+  push:
+    branches: [main]
+    paths: ['.github/release-version', '.github/workflows/release.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: preview-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Check and build
+        run: |
+          set -euo pipefail
+          version=$(cat .github/release-version)
+          grep -Fx "  console_version=$version" scripts/install.sh
+          npm install --global pnpm@11
+          pnpm install --frozen-lockfile
+          pnpm build
+          go test ./...
+          go vet ./...
+          bash -n scripts/install.sh scripts/package-release.sh
+          python3 scripts/test_bootstrap.py
+          bash scripts/package-release.sh "$version"
+      - name: Publish complete preview assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(cat .github/release-version)
+          if gh release view "$version" >/dev/null 2>&1; then
+            echo 'Release exists; refusing to overwrite published assets.'
+            exit 1
+          fi
+          gh release create "$version" --target "$GITHUB_SHA" --title "FRP Console $version" --notes-file docs/release-preview.md --draft --prerelease
+          gh release upload "$version" dist/*.tar.gz dist/SHA256SUMS dist/BUILD_INFO.txt dist/install.sh
+          gh release edit "$version" --draft=false --prerelease --latest=false

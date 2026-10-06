@@ -28,6 +28,24 @@ FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序�
 
 完整规格与开发清单见 [docs/v1-spec.md](docs/v1-spec.md)。
 
+## 一键下载安装（预览版）
+
+在 Debian/Ubuntu 的交互终端中执行（root 用户可省略 sudo）：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/cong86/frpc-ui/main/scripts/install.sh | sudo bash
+```
+
+入口检测系统和架构，下载固定预览版 Release 的 amd64/arm64 归档，核对 SHA-256，再启动安装向导。选择角色、填写配置、预览并确认后才安装。无需预装 Go、Node.js；需要 Bash、curl、tar、sha256sum 和运行中的 systemd。
+
+只检查下载和摘要、不安装：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/cong86/frpc-ui/main/scripts/install.sh | sudo bash -s -- --verify-only
+```
+
+程序临时文件在退出时清理；原始安装计划保存到 `/root/frp-console-install-*.json`，权限 0600。当前不是完整第一版，安装后 UI 仍通过回环地址和 SSH 隧道访问，不能接管已有部署。详情见 [安装说明](docs/systemd-install.md)。
+
 ## 构建
 
 需要 Go 1.26+、Node.js 22.12+、pnpm 11+。开发依赖只允许 esbuild 的安装脚本，见 `pnpm-workspace.yaml`。Go 依赖固定到本轮核实的稳定版本，具体版本与校验记录见 `go.mod` / `go.sum`。
