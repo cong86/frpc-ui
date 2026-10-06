@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"github.com/cong86/frpc-ui/internal/config"
 	"github.com/cong86/frpc-ui/internal/state"
+	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -73,6 +76,57 @@ func TestAuthHostOriginCSRFAndBootstrap(t *testing.T) {
 	}
 	if w = request("/api/instances", "127.0.0.1:18745", "", nil, cookie, ""); w.Code != 401 {
 		t.Fatal("logout did not invalidate session")
+	}
+}
+
+func TestPasswordBootstrapWithoutLengthRestriction(t *testing.T) {
+	for _, password := range []string{"", "1", "中文 密码🔑", strings.Repeat("长密码", 100)} {
+		t.Run("bytes_"+strconv.Itoa(len(password)), func(t *testing.T) {
+			st, err := state.Open(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer st.DB.Close()
+			s := New(st, &config.Manager{State: st, Instances: map[string]config.Instance{}}, "127.0.0.1:18745")
+			request := func(path, value string) *httptest.ResponseRecorder {
+				body, _ := json.Marshal(map[string]string{"user": "admin", "password": value})
+				r := httptest.NewRequest("POST", "http://"+s.Host+path, bytes.NewReader(body))
+				r.Header.Set("Content-Type", "application/json")
+				r.Header.Set("X-FRP-Console", "1")
+				w := httptest.NewRecorder()
+				s.Handler().ServeHTTP(w, r)
+				return w
+			}
+			w := request("/api/bootstrap", password)
+			if password == "" {
+				if w.Code != 400 {
+					t.Fatal("empty password accepted")
+				}
+				return
+			}
+			if w.Code != 200 {
+				t.Fatalf("bootstrap: %d", w.Code)
+			}
+			if w := request("/api/login", password); w.Code != 200 {
+				t.Fatalf("login: %d", w.Code)
+			}
+			if w := request("/api/login", password+"different"); w.Code != 401 {
+				t.Fatal("different password accepted")
+			}
+		})
+	}
+}
+
+func TestLegacyPasswordStillWorks(t *testing.T) {
+	p, err := bcrypt.GenerateFromPassword([]byte("legacy-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = checkPassword(p, "legacy-password"); err != nil {
+		t.Fatal(err)
+	}
+	if checkPassword(p, "wrong-password") == nil {
+		t.Fatal("different legacy password accepted")
 	}
 }
 

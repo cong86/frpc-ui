@@ -58,7 +58,7 @@ Windows 输出名使用 `bin/frp-console.exe`。前端构建写入 `internal/ser
 
 不要把 `--data` 指向共享或公开目录。Linux 目录权限 0700、敏感文件 0600；Windows 本地预览应使用当前用户受保护的目录，POSIX mode 不是 Windows ACL 保证。
 
-`backup.key` 与 `console.db` 必须一起保留；丢失密钥会拒绝启动，不生成新密钥覆盖。数据库保存 AES-GCM 加密的候选/旧配置，账户密码使用 bcrypt；会话仅保存随机令牌哈希。操作与审计响应不包含快照密文或凭据。
+`backup.key` 与 `console.db` 必须一起保留；丢失密钥会拒绝启动，不生成新密钥覆盖。数据库保存 AES-GCM 加密的候选/旧配置，新账户密码使用 SHA-256 预哈希后 bcrypt，兼容已有 bcrypt 密码；密码非空即可，没有单独的长度或字符种类限制（请求整体大小仍受限）。会话仅保存随机令牌哈希。操作与审计响应不包含快照密文或凭据。
 
 ## 验证
 

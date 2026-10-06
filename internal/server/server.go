@@ -40,6 +40,25 @@ func New(st *state.Store, m *config.Manager, host string) *Server {
 }
 func hash(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
 
+// Versioned prehashing avoids bcrypt's 72-byte input limit without truncating passwords.
+const passwordHashPrefix = "bcrypt-sha256:"
+
+func hashPassword(password string) ([]byte, error) {
+	p, err := bcrypt.GenerateFromPassword([]byte(hash(password)), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte(passwordHashPrefix), p...), nil
+}
+
+func checkPassword(stored []byte, password string) error {
+	if strings.HasPrefix(string(stored), passwordHashPrefix) {
+		return bcrypt.CompareHashAndPassword(stored[len(passwordHashPrefix):], []byte(hash(password)))
+	}
+	// Accounts created before versioned prehashing retain their original password.
+	return bcrypt.CompareHashAndPassword(stored, []byte(password))
+}
+
 // Cookies do not have a port boundary. Namespace independent consoles by their exact allowed host.
 func (s *Server) cookieName() string { return "frp_console_" + hash(s.Host)[:12] }
 func reply(w http.ResponseWriter, status int, v any) {
@@ -172,11 +191,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/api/bootstrap" {
-		if len(in.Password) < 12 || len(in.Password) > 72 {
-			fail(w, errors.New("password must contain 12..72 bytes"))
+		if in.Password == "" {
+			fail(w, errors.New("password must not be empty"))
 			return
 		}
-		p, e := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
+		p, e := hashPassword(in.Password)
 		if e != nil {
 			fail(w, errors.New("password hashing failed"))
 			return
@@ -198,7 +217,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			p = []byte("$2a$10$7EqJtq98hPqEX7fNZaFWoO5Js94rgK8LNX.QJJJkrfz6/gQ./jN6u")
 		}
-		if bcrypt.CompareHashAndPassword(p, []byte(in.Password)) != nil || e != nil {
+		if checkPassword(p, in.Password) != nil || e != nil {
 			_ = s.State.Audit(in.User, "login", "", "denied")
 			reply(w, 401, map[string]string{"error": "invalid credentials"})
 			return
