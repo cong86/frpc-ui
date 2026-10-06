@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/cong86/frpc-ui/main/scripts/install
 curl -fsSL https://raw.githubusercontent.com/cong86/frpc-ui/main/scripts/install.sh | sudo bash -s -- --verify-only
 ```
 
-程序临时文件在退出时清理；原始安装计划保存到 `/root/frp-console-install-*.json`，权限 0600。当前不是完整第一版，安装后 UI 仍通过回环地址和 SSH 隧道访问，不能接管已有部署。详情见 [安装说明](docs/systemd-install.md)。
+程序临时文件在退出时清理；原始安装计划保存到 `/root/frp-console-install-*.json`，权限 0600。当前不是完整第一版，安装后 UI 仍通过回环地址和 SSH 隧道访问，不能接管已有部署。详情见 [安装说明](docs/systemd-install.md) 与 [一键入口验证](docs/bootstrap-validation.md)。
 
 ## 构建
 
