@@ -103,6 +103,6 @@ pnpm build
 
 Linux CLI：sudo ./bin/frp-console install wizard。向导隐藏输入 Token，预检并校验官方归档和配置，脱敏预览后输入计划 ID 才创建独立服务。只支持新安装，管理员从首次 UI 访问初始化。
 
-安装器不修改 PVE 权限、防火墙、DNS 或已有服务。详见 [原生安装说明](docs/systemd-install.md) 与 [阶段验证](docs/stage3-validation.md)。
+安装器不修改 PVE 权限、防火墙、DNS 或已有服务。详见 [原生安装说明](docs/systemd-install.md)、[阶段验证](docs/stage3-validation.md) 与 [Gitee 实际验证](docs/gitee-validation.md)。
 
 Console 以低权限读取 systemd/FRP 本机 API。业务探针检查响应内容、UDP nonce 和 TLS 证书；两端 Cookie 按地址隔离，可同时登录。
