@@ -74,13 +74,17 @@ class SourceTests(unittest.TestCase):
 
 
 class ManifestTests(unittest.TestCase):
+    def release_fixture(self,root,tag):
+        names={f'frp-console_{tag}_linux_{a}.tar.gz' for a in ('amd64','arm64')} | {f'frp_0.71.0_linux_{a}.tar.gz' for a in ('amd64','arm64')} | {'FRP_VERSION','install.sh','BUILD_INFO.txt'}
+        for name in names:(root/name).write_bytes(b'0.71.0\n' if name=='FRP_VERSION' else name.encode())
+        manifest=''.join(hashlib.sha256((root/name).read_bytes()).hexdigest()+'  '+name+'\n' for name in sorted(names))
+        (root/'SHA256SUMS').write_bytes(manifest.encode())
+        return names,manifest
+
     def test_mirror_preserves_manifest_and_excludes_rejected_frp(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);tag='v0.1.0-preview.4'
-            names={f'frp-console_{tag}_linux_{a}.tar.gz' for a in ('amd64','arm64')} | {f'frp_0.71.0_linux_{a}.tar.gz' for a in ('amd64','arm64')} | {'FRP_VERSION','install.sh','BUILD_INFO.txt'}
-            for name in names:(root/name).write_bytes(b'0.71.0\n' if name=='FRP_VERSION' else name.encode())
-            manifest=''.join(hashlib.sha256((root/name).read_bytes()).hexdigest()+'  '+name+'\n' for name in sorted(names))
-            (root/'SHA256SUMS').write_bytes(manifest.encode())
+            names,manifest=self.release_fixture(root,tag)
             uploaded=[]
             def api(path,method='GET',value=None,multipart=None):
                 if method=='GET':
@@ -92,6 +96,23 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual(uploaded[-1],('SHA256SUMS',manifest.encode()))
             self.assertFalse(any(name.startswith('frp_') for name,_ in uploaded))
             self.assertEqual({name for name,_ in uploaded},names-{f'frp_0.71.0_linux_{a}.tar.gz' for a in ('amd64','arm64')} | {'SHA256SUMS'})
+
+    def test_completed_marker_mode_requires_complete_assets_and_same_manifest(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);tag='v0.1.0-preview.4';names,manifest=self.release_fixture(root,tag)
+            supported=names-{f'frp_0.71.0_linux_{a}.tar.gz' for a in ('amd64','arm64')} | {'SHA256SUMS'}
+            release={'id':123,'tag_name':tag,'assets':[{'name':x} for x in supported]}
+            digest=hashlib.sha256(manifest.encode()).hexdigest()
+            with patch.object(mirror,'api',return_value=release) as api,patch.object(mirror,'public_asset_hash',return_value=digest) as download:
+                self.assertEqual(mirror.sync_assets(tag,root,manifest_marker=True),6)
+                download.assert_called_once_with(tag,'SHA256SUMS');api.assert_called_once_with('/releases/tags/'+tag)
+            with patch.object(mirror,'api',return_value=release) as api,patch.object(mirror,'public_asset_hash',return_value='0'*64):
+                with self.assertRaises(mirror.MirrorError):mirror.sync_assets(tag,root,manifest_marker=True)
+                self.assertEqual(api.call_count,1)
+            release['assets']=[x for x in release['assets'] if x['name']!='install.sh']
+            with patch.object(mirror,'api',return_value=release) as api,patch.object(mirror,'public_asset_hash') as download:
+                with self.assertRaises(mirror.MirrorError):mirror.sync_assets(tag,root,manifest_marker=True)
+                download.assert_not_called();self.assertEqual(api.call_count,1)
 
     def test_hash_mismatch_rejected(self):
         with tempfile.TemporaryDirectory() as d:

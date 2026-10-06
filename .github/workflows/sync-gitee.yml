@@ -66,4 +66,4 @@ jobs:
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: python3 scripts/sync_gitee.py --tag "$RELEASE_TAG" --assets-dir mirror-assets
+        run: python3 scripts/sync_gitee.py --tag "$RELEASE_TAG" --assets-dir mirror-assets --manifest-marker

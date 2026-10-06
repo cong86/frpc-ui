@@ -144,7 +144,7 @@ def public_asset_hash(tag, name):
         raise MirrorError('Existing public attachment unavailable; refusing to replace it') from None
 
 
-def sync_assets(tag, root):
+def sync_assets(tag, root, manifest_marker=False):
     if not TAG.fullmatch(tag):
         raise MirrorError('Invalid release tag')
     hashes = checksums(root)
@@ -176,6 +176,13 @@ def sync_assets(tag, root):
     mirrored = required - {f'frp_{version}_linux_{a}.tar.gz' for a in ('amd64', 'arm64')}
     # SHA256SUMS is uploaded after every supported mirror attachment.
     hashes['SHA256SUMS'] = hashlib.sha256((root/'SHA256SUMS').read_bytes()).hexdigest()
+    if manifest_marker and 'SHA256SUMS' in existing:
+        if not (mirrored | {'SHA256SUMS'}) <= existing:
+            raise MirrorError('Published readiness marker exists but mirror attachments are incomplete')
+        if public_asset_hash(tag, 'SHA256SUMS') != hashes['SHA256SUMS']:
+            raise MirrorError('Published readiness marker differs; refusing to overwrite the release')
+        print('Gitee mirror already published: complete attachment names and original manifest marker match; archive content audit not performed', flush=True)
+        return len(mirrored)+1
     for name in sorted(mirrored)+['SHA256SUMS']:
         if name in existing:
             if public_asset_hash(tag, name) != hashes[name]:
@@ -197,6 +204,7 @@ def main():
     parser.add_argument('--commit')
     parser.add_argument('--tag')
     parser.add_argument('--assets-dir', type=Path)
+    parser.add_argument('--manifest-marker', action='store_true', help='Trust the final published manifest for completed mirrors; does not audit existing archive bytes')
     args = parser.parse_args()
     if not os.environ.get('GITEE_TOKEN'):
         raise MirrorError('Configure repository Actions secret GITEE_TOKEN first')
@@ -213,7 +221,7 @@ def main():
     if args.code:
         print('Gitee main verified: '+sync_code(), flush=True)
     if args.tag and args.assets_dir:
-        print('Gitee mirrored attachment count: '+str(sync_assets(args.tag, args.assets_dir)), flush=True)
+        print('Gitee mirrored attachment count: '+str(sync_assets(args.tag, args.assets_dir, manifest_marker=args.manifest_marker)), flush=True)
     elif args.tag or args.assets_dir:
         raise MirrorError('--tag and --assets-dir are required together')
 
