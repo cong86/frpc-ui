@@ -8,21 +8,23 @@ GitHub 为开发与发布来源；Gitee 为国内源码和 Console 下载镜像�
 
 以后只向 GitHub 提交；Gitee 根据自身镜像配置同步代码提交、分支和标签。源码同步不需要 GitHub Actions 的 GITEE_TOKEN。官方说明的镜像触发最短间隔为五分钟，不能保证每次推送立即可见；以镜像管理页完成记录和两端实际提交为准。
 
-Gitee 文档列出的镜像内容不含 Release 描述和二进制附件。当前 preview.4 六个附件已单独上传并验证，未来版本附件仍需单独镜像，不把源码一致当作附件发布完成。
+Gitee 文档列出的镜像内容不含 Release 描述和二进制附件。发布附件由 GitHub `Sync Gitee` 单独处理，不把源码一致当作附件发布完成。
 
-原 GitHub `Sync Gitee` 的 push/workflow_run 自动触发已移除，避免与用户选定的镜像方案重复运行及报缺少 Secret。没有修改用户的 Gitee 镜像设置，也不为源码同步继续迁移本机凭据。
+原 GitHub `Sync Gitee` 的源码 push 触发和 Git 推送步骤已移除，避免与用户选定的镜像方案重复传输。用户已授权配置 GITEE_TOKEN，仓库 Secret 元数据读取成功；GitHub 私人令牌仅用于本次内存中的 API 操作，未持久保存。没有修改用户的 Gitee 镜像设置或 Webhook URL。
 
 依据：[Gitee 仓库镜像官方说明](https://help.gitee.com/repository/settings/sync-between-gitee-github)。
 
-## 可选：手动补同步源码或附件
+## Release 附件同步
 
-只有使用保留的手动 GitHub Actions 入口时，才需要在仓库 Settings → Secrets and variables → Actions 添加 repository secret `GITEE_TOKEN`。使用 Gitee 专用 Token，需能够推送此仓库并创建 Release/上传附件。不要把 Token 写进 URL、代码、Issue 或日志。
+自动或手动附件同步使用 repository secret `GITEE_TOKEN`，需能够读取仓库并创建 Release/上传附件。该 Secret 已确认存在；令牌不写入 URL、代码、Issue 或日志。
 
 Token 配置须由用户授权；迁移本机已有凭据到 GitHub Secret 需要独立明确授权。凭据不进入仓库、URL 或日志。
 
-- Actions → Sync Gitee → Run workflow，`release_tag` 填已发布版本；留空只补同步源码。
-- 手动入口下载完整 GitHub 附件，验证 SHA256SUMS 后上传 Gitee 可接受的附件。
-- 该备用脚本普通推送 main 和版本标签，不删除远端独有分支/标签，不强推。远端有独立提交或同名不同标签时停止，先人工合并差异。Gitee 自带镜像的行为由平台实现，不能混同为本脚本的保护保证。
+- 成功的 `Preview release` 通过 workflow_run 触发附件同步，仅接受 main 分支的成功发布；从该发布提交读取版本。
+- 手动补同步：Actions → Sync Gitee → Run workflow，`release_tag` 必须填已发布版本。
+- 先校验凭据所属账号，再等待 Gitee 原生镜像标签匹配 GitHub 发布提交（最长十分钟）。标签指向其他提交时立即拒绝，不通过附件发布改写源码或标签。
+- 下载完整 GitHub 附件，验证 SHA256SUMS 后上传 Gitee 可接受的六个附件。已经存在且摘要一致的附件跳过；不同则拒绝覆盖。
+- 工作流不再调用 Git 同步。`sync_gitee.py --code` 保留为独立的人工备用命令，使用普通推送，保护远端独有内容并拒绝冲突；这些保护不代表 Gitee 平台镜像本身的行为。
 
 未配置 Secret 会明确失败，不报告同步成功。并发同步串行执行，避免旧任务覆盖新状态。失败不自动回滚另一端已成功的推送；超时写入不盲目重试，先查看远端状态。重复镜像核对现有附件摘要，匹配则跳过，不匹配则拒绝覆盖。
 

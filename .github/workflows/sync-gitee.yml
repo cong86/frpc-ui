@@ -1,12 +1,14 @@
 name: Sync Gitee
 on:
-  # Automatic source synchronization belongs to the native Gitee Pull mirror.
-  # This is an optional manual fallback; release attachments are separate.
+  # Source refs belong to the native Gitee Pull mirror; this mirrors assets only.
+  workflow_run:
+    workflows: ['Preview release']
+    types: [completed]
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Existing GitHub release to mirror (empty means source only)'
-        required: false
+        description: 'Existing GitHub release whose attachments should be mirrored'
+        required: true
 permissions:
   contents: read
 concurrency:
@@ -14,6 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -26,20 +29,32 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts -p test_sync_gitee.py
           chmod 0700 scripts/gitee-askpass.sh
-      - name: Synchronize main and tags without force
+      - name: Verify Gitee credential identity
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: python3 scripts/sync_gitee.py --code
+        run: python3 scripts/sync_gitee.py --check-auth
       - name: Select completed release
         id: release
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
           MANUAL_TAG: ${{ inputs.release_tag }}
         run: |
           tag=$MANUAL_TAG
-          if [[ -n "$tag" && ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9][a-zA-Z0-9.-]*)?$ ]]; then
+          if [[ "$EVENT_NAME" == workflow_run ]]; then
+            tag=$(git show "$RELEASE_SHA:.github/release-version")
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9][a-zA-Z0-9.-]*)?$ ]]; then
             echo 'Invalid release tag'; exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Wait for native Gitee tag mirror
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          commit=$(git rev-parse "$RELEASE_TAG^{commit}")
+          python3 scripts/sync_gitee.py --wait-tag "$RELEASE_TAG" --commit "$commit"
       - name: Download complete GitHub release
         if: steps.release.outputs.tag != ''
         env:

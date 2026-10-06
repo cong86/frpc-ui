@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -58,7 +59,7 @@ def sync_code(target=GIT_URL):
     return source
 
 
-def api(path, method='GET', value=None, multipart=None):
+def api(path, method='GET', value=None, multipart=None, identity=False):
     token = os.environ.get('GITEE_TOKEN', '')
     if not token:
         raise MirrorError('Configure repository Actions secret GITEE_TOKEN first')
@@ -72,7 +73,8 @@ def api(path, method='GET', value=None, multipart=None):
         boundary = 'frp-console-'+uuid.uuid4().hex
         data = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()+content+f'\r\n--{boundary}--\r\n'.encode())
         headers['Content-Type'] = 'multipart/form-data; boundary='+boundary
-    request = urllib.request.Request(API+path, data=data, headers=headers, method=method)
+    url = 'https://gitee.com/api/v5/user' if identity else API+path
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.build_opener(NoRedirect()).open(request, timeout=120) as response:
             return json.load(response)
@@ -97,6 +99,35 @@ def checksums(root):
             raise MirrorError('Release asset does not match SHA256SUMS')
         result[name] = digest
     return result
+
+
+def check_auth():
+    user = api('', identity=True)
+    if not isinstance(user, dict) or user.get('login') != 'wangcong886':
+        raise MirrorError('Gitee credential identity did not match the configured repository owner')
+
+
+def wait_mirror_tag(tag, commit, timeout=600):
+    if not TAG.fullmatch(tag) or not re.fullmatch(r'[0-9a-f]{40}', commit):
+        raise MirrorError('Invalid expected native mirror tag or commit')
+    deadline = time.monotonic()+timeout
+    while True:
+        for page in range(1, 11):
+            rows = api(f'/tags?per_page=100&page={page}')
+            if not isinstance(rows, list):
+                raise MirrorError('Invalid Gitee tag list')
+            found = next((x for x in rows if x.get('name') == tag), None)
+            if found:
+                if found.get('commit', {}).get('sha') != commit:
+                    raise MirrorError('Gitee tag points to another commit; refusing attachment publication')
+                return
+            if len(rows) < 100:
+                break
+        remaining = deadline-time.monotonic()
+        if remaining <= 0:
+            raise MirrorError('Native Gitee mirror tag not ready; inspect the Pull mirror before rerunning')
+        print('Waiting for native Gitee mirror tag; no source push performed', flush=True)
+        time.sleep(min(15, remaining))
 
 
 def public_asset_hash(tag, name):
@@ -159,6 +190,9 @@ def sync_assets(tag, root):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--code', action='store_true')
+    parser.add_argument('--check-auth', action='store_true')
+    parser.add_argument('--wait-tag')
+    parser.add_argument('--commit')
     parser.add_argument('--tag')
     parser.add_argument('--assets-dir', type=Path)
     args = parser.parse_args()
@@ -166,6 +200,14 @@ def main():
         raise MirrorError('Configure repository Actions secret GITEE_TOKEN first')
     os.environ['GIT_ASKPASS'] = str(Path(__file__).with_name('gitee-askpass.sh').resolve())
     os.environ['GIT_TERMINAL_PROMPT'] = '0'
+    if args.check_auth:
+        check_auth()
+        print('Gitee credential identity verified', flush=True)
+    if args.wait_tag and args.commit:
+        wait_mirror_tag(args.wait_tag, args.commit)
+        print('Native Gitee tag matches the GitHub release commit', flush=True)
+    elif args.wait_tag or args.commit:
+        raise MirrorError('--wait-tag and --commit are required together')
     if args.code:
         print('Gitee main verified: '+sync_code(), flush=True)
     if args.tag and args.assets_dir:

@@ -112,6 +112,21 @@ class ManifestTests(unittest.TestCase):
 
 
 class APITests(unittest.TestCase):
+    def test_credential_owner_is_verified(self):
+        with patch.object(mirror,'api',return_value={'login':'wangcong886'}):mirror.check_auth()
+        with patch.object(mirror,'api',return_value={'login':'another-owner'}):
+            with self.assertRaises(mirror.MirrorError):mirror.check_auth()
+
+    def test_native_tag_must_match_without_source_writes(self):
+        commit='a'*40
+        with patch.object(mirror,'api',return_value=[{'name':'v0.1.0','commit':{'sha':commit}}]) as api,patch.object(mirror,'git') as git:
+            mirror.wait_mirror_tag('v0.1.0',commit,timeout=0);git.assert_not_called()
+            api.assert_called_once_with('/tags?per_page=100&page=1')
+        with patch.object(mirror,'api',return_value=[{'name':'v0.1.0','commit':{'sha':'b'*40}}]):
+            with self.assertRaises(mirror.MirrorError):mirror.wait_mirror_tag('v0.1.0',commit,timeout=0)
+        with patch.object(mirror,'api',return_value=[]):
+            with self.assertRaises(mirror.MirrorError):mirror.wait_mirror_tag('v0.1.0',commit,timeout=0)
+
     def test_token_is_header_only_and_redirect_not_followed(self):
         observed=[]
         class Handler(http.server.BaseHTTPRequestHandler):
