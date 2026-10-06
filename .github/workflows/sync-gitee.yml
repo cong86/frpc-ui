@@ -1,11 +1,7 @@
 name: Sync Gitee
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  workflow_run:
-    workflows: ['Preview release']
-    types: [completed]
+  # Automatic source synchronization belongs to the native Gitee Pull mirror.
+  # This is an optional manual fallback; release attachments are separate.
   workflow_dispatch:
     inputs:
       release_tag:
@@ -18,7 +14,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -38,16 +33,9 @@ jobs:
       - name: Select completed release
         id: release
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
           MANUAL_TAG: ${{ inputs.release_tag }}
         run: |
-          tag=''
-          if [[ "$EVENT_NAME" == workflow_run ]]; then
-            tag=$(git show "$RELEASE_SHA:.github/release-version")
-          elif [[ "$EVENT_NAME" == workflow_dispatch ]]; then
-            tag=$MANUAL_TAG
-          fi
+          tag=$MANUAL_TAG
           if [[ -n "$tag" && ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9][a-zA-Z0-9.-]*)?$ ]]; then
             echo 'Invalid release tag'; exit 1
           fi

@@ -8,6 +8,6 @@ preview.2 修复私有 umask 下安装目录和程序权限被收紧的问题，
 
 preview.3 增加国内源和官方 FRP 缓存。实际发布验证发现 Gitee 拒绝官方 FRP 归档；preview.3 原版安装入口不适用于 Gitee。
 
-preview.4 修正国内源兼容：Gitee 镜像源码、标签、Console 两架构归档和元数据，保留 GitHub 原始完整 SHA256SUMS；官方 FRP 归档只在 GitHub 发布。选 Gitee 时 FRP 从官方 GitHub 获取，也可用 `--frp-archive` 指定原版本地归档，仍强制校验。完整国内在线镜像尚未实现。GitHub 更新由独立同步工作流推送源码、标签和可接受的附件，需配置仓库 GITEE_TOKEN。
+preview.4 修正国内源兼容：Gitee 镜像源码、标签、Console 两架构归档和元数据，保留 GitHub 原始完整 SHA256SUMS；官方 FRP 归档只在 GitHub 发布。选 Gitee 时 FRP 从官方 GitHub 获取，也可用 `--frp-archive` 指定原版本地归档，仍强制校验。完整国内在线镜像尚未实现。源码自动同步已改用用户配置的 Gitee Pull 镜像；附件单独处理，GitHub Sync Gitee 保留为可选手动入口，使用该入口时才需 GITEE_TOKEN。
 
 仍未开放生产接管、配置运行应用/自动回滚、Compose 自动安装、Nginx 加载或升级/卸载。arm64 构建不代表 arm64 实机验收。

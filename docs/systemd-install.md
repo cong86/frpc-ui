@@ -14,7 +14,7 @@ Console、FRP_VERSION 与 SHA256SUMS 从选定 Release 经 HTTPS 下载。Gitee 
 
 向导标准输入重新连接 `/dev/tty`，因此 `curl | bash` 可以正常交互并隐藏输入 Token。每次使用独立私有临时目录，退出清理下载文件；私有计划保留在 `/root/frp-console-install-*.json`（0600），取消仍不安装。管理员在完成安装后首次网页访问设置。
 
-发布流水线由 `.github/release-version` 更新触发，构建两架构 Console 归档，并校验/附带原版官方 FRP 归档、FRP_VERSION、SHA256SUMS、install.sh 和 BUILD_INFO；全部上传后才公开 GitHub 预览 Release，不覆盖已发布版本。Gitee 自动同步需配置专用 GITEE_TOKEN，见 [同步说明](gitee-sync.md)。arm64 仅构建/下载校验，不表示实机运行。
+发布流水线由 `.github/release-version` 更新触发，构建两架构 Console 归档，并校验/附带原版官方 FRP 归档、FRP_VERSION、SHA256SUMS、install.sh 和 BUILD_INFO；全部上传后才公开 GitHub 预览 Release，不覆盖已发布版本。Gitee 源码使用平台自带 Pull 镜像，发布附件单独同步，见 [同步说明](gitee-sync.md)。arm64 仅构建/下载校验，不表示实机运行。
 
 ## 已有程序启动向导
 

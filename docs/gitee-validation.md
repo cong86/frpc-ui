@@ -21,13 +21,19 @@
 
 preview.4 选 Gitee 时，Console/元数据从 Gitee 下载，FRP 明确从官方 GitHub 下载。GitHub 不可达时必须提供原版本地归档。完整国内在线安装仍需另一个已授权且接受官方 FRP 文件的托管源。preview.3 原始入口假设完整 Gitee 附件，使用 preview.4 替代，未覆盖旧版本附件。
 
-## 自动同步尚待启用
+## 自动同步方案更新
+
+2026-10-07 后续确认：用户已解决源码同步，采用 Gitee 自带 Pull 自动镜像。管理页面截图显示源仓库 cong86/frpc-ui，最近请求 03:46:20、最近完成 03:48:29。该时间早于本次后续工作流调整；当前方案和验收入口见 [同步说明](gitee-sync.md)。
+
+原 Sync Gitee 的 push/workflow_run 触发已移除，仅保留可选手动补同步入口。源码同步不需要继续配置 GITEE_TOKEN；Release 附件的自动同步并未因此得到证明。本页以下保留调整前的实际检查结果。
+
+### 原 GitHub Actions 方案的历史检查
 
 `Sync Gitee` 已提交，main 更新触发源码/标签同步；成功的 Preview release 通过 workflow_run 触发可接受附件的镜像。同步为普通推送，不强推、不删除远端独有内容；完整 GitHub 产物先校验，SHA256SUMS 最后上传。
 
 用户已明确授权将本机现有 Gitee 凭据配置为此 GitHub 仓库的 Actions Secret `GITEE_TOKEN`。但当前本机 GitHub 认证访问 Secrets API 返回 403，GitHub 连接器不提供 Secrets API，浏览器控制也未能连接。因此本次尚未保存 Secret；[当前同步运行](https://github.com/cong86/frpc-ui/actions/runs/37520630782) 的实际日志为 `Configure repository Actions secret GITEE_TOKEN first`。本次 Gitee 发布为本机执行的镜像，不能报告自动同步已启用。
 
-需要在仓库 Settings → Secrets and variables → Actions 保存 GITEE_TOKEN，或提供此仓库 Secrets 读写权限给本机 GitHub 凭据。设置后重跑 Sync Gitee，手动输入 `release_tag=v0.1.0-preview.4` 可核验首次完整同步；源码与附件成功均需分别确认。
+如果未来选择手动 GitHub 附件同步入口，需要在仓库 Settings → Secrets and variables → Actions 保存 GITEE_TOKEN。手动输入 `release_tag=v0.1.0-preview.4` 可核验完整补同步；源码与附件成功均需分别确认。
 
 ## 测试实例与边界
 
