@@ -13,7 +13,7 @@ import time
 import unittest
 
 SCRIPT = Path(__file__).with_name('install.sh').resolve()
-VERSION = 'v0.1.0-preview.2'
+VERSION = 'v0.1.0-preview.3'
 
 
 class BootstrapTests(unittest.TestCase):
@@ -30,6 +30,9 @@ class BootstrapTests(unittest.TestCase):
         self.command('curl', 'url=""; output=""; while (($#)); do case "$1" in --output) output=$2; shift 2;; https://*) url=$1; shift;; *) shift;; esac; done; cp "$FIXTURE/${url##*/}" "$output"')
         self.archive('amd64')
         self.archive('arm64')
+        (self.root/'FRP_VERSION').write_text('0.71.0\n')
+        for arch in ('amd64', 'arm64'):
+            (self.root/f'frp_0.71.0_linux_{arch}.tar.gz').write_bytes(b'official-archive-fixture')
         self.checksums()
 
     def tearDown(self):
@@ -48,7 +51,8 @@ class BootstrapTests(unittest.TestCase):
             tar.addfile(info, io.BytesIO(body))
 
     def checksums(self):
-        (self.root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(self.root.glob('*.tar.gz'))))
+        files = sorted(self.root.glob('*.tar.gz'))+[self.root/'FRP_VERSION']
+        (self.root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in files))
 
     def run_script(self, *args):
         return subprocess.run(['bash', str(SCRIPT), *args], env=self.env, capture_output=True, start_new_session=True)
@@ -86,6 +90,19 @@ class BootstrapTests(unittest.TestCase):
 
     def test_unsafe_version_rejected(self):
         self.assertNotEqual(self.run_script('--verify-only', '--version', '../../other').returncode, 0)
+
+    def test_github_source_remains_available(self):
+        self.assertEqual(self.run_script('--verify-only', '--source', 'github').returncode, 0)
+
+    def test_unknown_source_rejected(self):
+        self.assertNotEqual(self.run_script('--verify-only', '--source', 'third-party').returncode, 0)
+
+    def test_corrupt_frp_archive_never_executes(self):
+        (self.root/'frp_0.71.0_linux_amd64.tar.gz').write_bytes(b'tampered')
+        r = self.run_script('--verify-only')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn(b'Checksum mismatch', r.stderr)
+        self.assertFalse(self.marker.exists())
 
     def test_no_terminal_fails_before_install(self):
         r = self.run_script()

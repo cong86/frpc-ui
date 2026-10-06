@@ -25,6 +25,7 @@ func CLI(args []string) error {
 	output := fs.String("out", "", "private preview plan JSON")
 	planFile := fs.String("plan", "", "private installation plan JSON")
 	confirmation := fs.String("confirm", "", "exact plan ID to confirm")
+	archive := fs.String("archive", "", "verified official FRP archive default for wizard")
 	if e := fs.Parse(args[1:]); e != nil {
 		return e
 	}
@@ -42,7 +43,7 @@ func CLI(args []string) error {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
 			return errors.New("wizard requires a terminal; use a private request JSON for automation")
 		}
-		r, e := wizard()
+		r, e := wizard(*archive)
 		if e != nil {
 			return e
 		}
@@ -119,7 +120,7 @@ func printPreview(p Plan) {
 	}{p.ID, p.Arch, Version, Checksums[p.Arch], p.Files, []string{"Fresh installation only. Existing deployment is not taken over.", "FRP and Console independent systemd services. Console runs without root.", "Process active does not prove authentication or business access.", "Plan contains encrypted-at-rest credentials only in Console backups; the private installer input/plan contains raw config and must remain 0600."}}, "", "  ")
 	fmt.Println(string(b))
 }
-func wizard() (Request, error) {
+func wizard(defaultArchive string) (Request, error) {
 	r := Request{Configs: map[string]string{}}
 	reader := bufio.NewReader(os.Stdin)
 	ask := func(label, def string) string {
@@ -144,7 +145,7 @@ func wizard() (Request, error) {
 	if e != nil || port < 1024 || port > 65535 {
 		return r, errors.New("invalid port")
 	}
-	r.Archive = ask("已校验官方归档路径（留空由安装器下载）", "")
+	r.Archive = ask("已校验官方归档路径（留空由安装器下载）", defaultArchive)
 	fmt.Print("两端一致的 Token（不回显）: ")
 	token, e := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()

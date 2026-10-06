@@ -11,5 +11,6 @@ for arch in amd64 arm64; do
   tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -czf "dist/frp-console_${version}_linux_${arch}.tar.gz" -C "dist/linux_$arch" frp-console
 done
 cp scripts/install.sh dist/install.sh
+python3 scripts/prepare_frp_assets.py
 printf 'version=%s\ncommit=%s\n' "$version" "$(git rev-parse HEAD)" > dist/BUILD_INFO.txt
-(cd dist; sha256sum ./*.tar.gz install.sh BUILD_INFO.txt | sed 's@  ./@  @' > SHA256SUMS)
+(cd dist; sha256sum ./*.tar.gz install.sh BUILD_INFO.txt FRP_VERSION | sed 's@  ./@  @' > SHA256SUMS)

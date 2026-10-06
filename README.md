@@ -33,18 +33,18 @@ FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序�
 在 Debian/Ubuntu 的交互终端中执行（root 用户可省略 sudo）：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/cong86/frpc-ui/main/scripts/install.sh | sudo bash
+curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | sudo bash
 ```
 
-入口检测系统和架构，下载固定预览版 Release 的 amd64/arm64 归档，核对 SHA-256，再启动安装向导。选择角色、填写配置、预览并确认后才安装。无需预装 Go、Node.js；需要 Bash、curl、tar、sha256sum 和运行中的 systemd。
+入口检测系统和架构，默认从 Gitee 下载固定预览版 Console 和官方 FRP 的 amd64/arm64 归档，核对 SHA-256，再启动安装向导。FRP 缓存自动填入向导，目标机无需再访问 GitHub；也可用 `--source github`。选择角色、填写配置、预览并确认后才安装。无需预装 Go、Node.js；需要 Bash、curl、tar、sha256sum 和运行中的 systemd。
 
 只检查下载和摘要、不安装：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/cong86/frpc-ui/main/scripts/install.sh | sudo bash -s -- --verify-only
+curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | sudo bash -s -- --verify-only
 ```
 
-程序临时文件在退出时清理；原始安装计划保存到 `/root/frp-console-install-*.json`，权限 0600。当前不是完整第一版，安装后 UI 仍通过回环地址和 SSH 隧道访问，不能接管已有部署。详情见 [安装说明](docs/systemd-install.md) 与 [一键入口验证](docs/bootstrap-validation.md)。
+程序临时文件在退出时清理；原始安装计划保存到 `/root/frp-console-install-*.json`，权限 0600。当前不是完整第一版，安装后 UI 仍通过回环地址和 SSH 隧道访问，不能接管已有部署。详情见 [安装说明](docs/systemd-install.md)、[一键入口验证](docs/bootstrap-validation.md) 与 [自动同步设置](docs/gitee-sync.md)。
 
 ## 构建
 

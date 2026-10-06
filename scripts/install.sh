@@ -3,18 +3,25 @@
 main() (
   set -Eeuo pipefail
   umask 077
-  console_version=v0.1.0-preview.2
+  console_version=v0.1.0-preview.3
+  source_name=gitee
   verify_only=false
   die() { printf 'FRP Console: %s\n' "$*" >&2; exit 1; }
   while (($#)); do
     case "$1" in
       --version) (($# >= 2)) || die '--version requires a value'; console_version=$2; shift 2 ;;
+      --source) (($# >= 2)) || die '--source requires gitee or github'; source_name=$2; shift 2 ;;
       --verify-only) verify_only=true; shift ;;
-      --help) printf 'Usage: bash install.sh [--version vX.Y.Z[-suffix]] [--verify-only]\n'; exit 0 ;;
+      --help) printf 'Usage: bash install.sh [--source gitee|github] [--version vX.Y.Z[-suffix]] [--verify-only]\n'; exit 0 ;;
       *) die "Unknown option: $1" ;;
     esac
   done
   [[ $console_version =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9][a-zA-Z0-9.-]*)?$ ]] || die 'Invalid release version'
+  case "$source_name" in
+    gitee) base="https://gitee.com/wangcong886/frpc-ui/releases/download/${console_version}" ;;
+    github) base="https://github.com/cong86/frpc-ui/releases/download/${console_version}" ;;
+    *) die 'Download source must be gitee or github' ;;
+  esac
   [[ $(uname -s) == Linux ]] || die 'Only Linux is supported'
   [[ $(id -u) == 0 ]] || die 'Run with curl ... | sudo bash'
   for tool in curl sha256sum tar mktemp chmod stat systemctl grep; do
@@ -32,23 +39,32 @@ main() (
   temp=$(mktemp -d /var/tmp/frp-console-bootstrap.XXXXXXXX)
   trap 'rm -rf -- "$temp"' EXIT
   asset="frp-console_${console_version}_linux_${arch}.tar.gz"
-  base="https://github.com/cong86/frpc-ui/releases/download/${console_version}"
   download() {
     curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
       --connect-timeout 15 --max-time 180 --retry 2 "$base/$1" --output "$temp/$1"
   }
-  printf 'Downloading FRP Console %s (linux/%s)...\n' "$console_version" "$arch"
+  printf 'Downloading FRP Console %s (linux/%s, source=%s)...\n' "$console_version" "$arch" "$source_name"
   download SHA256SUMS
   download "$asset"
-  expected=''
-  while read -r sum filename extra; do
-    if [[ $filename == "$asset" ]]; then
-      [[ -z $expected && -z ${extra:-} && $sum =~ ^[0-9a-f]{64}$ ]] || die 'Invalid checksum entry'
-      expected=$sum
-    fi
-  done < "$temp/SHA256SUMS"
-  [[ -n $expected ]] || die 'Release checksum missing'
-  printf '%s  %s\n' "$expected" "$temp/$asset" | sha256sum --check --status || die 'Checksum mismatch; nothing executed'
+  verify() {
+    local expected='' sum filename extra
+    while read -r sum filename extra; do
+      if [[ $filename == "$1" ]]; then
+        [[ -z $expected && -z ${extra:-} && $sum =~ ^[0-9a-f]{64}$ ]] || die 'Invalid checksum entry'
+        expected=$sum
+      fi
+    done < "$temp/SHA256SUMS"
+    [[ -n $expected ]] || die 'Release checksum missing'
+    printf '%s  %s\n' "$expected" "$temp/$1" | sha256sum --check --status || die 'Checksum mismatch; nothing executed'
+  }
+  verify "$asset"
+  download FRP_VERSION
+  verify FRP_VERSION
+  frp_version=$(cat "$temp/FRP_VERSION")
+  [[ $frp_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die 'Invalid official FRP version'
+  frp_asset="frp_${frp_version}_linux_${arch}.tar.gz"
+  download "$frp_asset"
+  verify "$frp_asset"
   [[ $(tar -tzf "$temp/$asset") == frp-console ]] || die 'Unexpected archive members'
   [[ $(tar -tvzf "$temp/$asset") == -* ]] || die 'Archive must contain one regular binary'
   tar -xzf "$temp/$asset" --no-same-owner --no-same-permissions -C "$temp"
@@ -63,6 +79,6 @@ main() (
   (( (8#$mode & 8#022) == 0 )) || die '/root must not be writable by other users'
   plan="/root/frp-console-install-${temp##*/}.json"
   printf 'Download verified. Starting installation wizard; private plan: %s\n' "$plan"
-  "$temp/frp-console" install wizard --out "$plan" <&3 >&3 2>&3
+  "$temp/frp-console" install wizard --archive "$temp/$frp_asset" --out "$plan" <&3 >&3 2>&3
 )
 main "$@"
