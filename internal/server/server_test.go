@@ -75,3 +75,14 @@ func TestAuthHostOriginCSRFAndBootstrap(t *testing.T) {
 		t.Fatal("logout did not invalidate session")
 	}
 }
+
+func TestTwoConsolesUseIndependentCookieNamespaces(t *testing.T) {
+	a := &Server{Host: "127.0.0.1:18752"}
+	b := &Server{Host: "127.0.0.1:18759"}
+	if a.cookieName() == b.cookieName() {
+		t.Fatal("ports share a cookie namespace")
+	}
+	if a.cookieName() != (&Server{Host: a.Host}).cookieName() {
+		t.Fatal("cookie namespace is not stable")
+	}
+}

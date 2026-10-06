@@ -36,6 +36,18 @@ type Snapshot struct {
 }
 
 func Revision(raw string) string { h := sha256.Sum256([]byte(raw)); return hex.EncodeToString(h[:]) }
+
+// RedactText also protects runtime labels returned by official management APIs.
+func (d *Document) RedactText(text string) string {
+	values := secrets(d.Values)
+	sort.Slice(values, func(i, j int) bool { return len(values[i]) > len(values[j]) })
+	for _, value := range values {
+		if value != "" {
+			text = strings.ReplaceAll(text, value, "***")
+		}
+	}
+	return text
+}
 func Parse(raw, role string) (*Document, error) {
 	if len(raw) > MaxSize {
 		return nil, errors.New("configuration exceeds 1 MiB")
