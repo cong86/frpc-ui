@@ -31,6 +31,16 @@ preview.4 选 Gitee 时，Console/元数据从 Gitee 下载，FRP 明确从官�
 
 原手动工作流 37522769922 在重复 Git 源码访问步骤停留较久，已取消，改用仅附件 API 的任务验收。本页以下保留早期方案的实际检查结果。
 
+### 后续验收通过
+
+2026-10-07 04:24（Asia/Singapore）检查：GitHub/Gitee main 均为 `572fb07f25bc28f9030f394d53df54205b85cc0e`。此阶段没有人工推送 Gitee，确认原生 Pull 镜像已完成后续源码更新；早期回调失败不能代表镜像最终未完成。
+
+用户提供的 GitHub API 凭据读取目标仓库和 Secrets 公钥均为 HTTP 200，目标仓库权限包括 admin/push。GITEE_TOKEN 元数据读取成功，Actions 的 Gitee 账号认证通过。没有把 GitHub 令牌持久保存到 Git、文件或仓库。
+
+[附件同步运行 37524072976](https://github.com/cong86/frpc-ui/actions/runs/37524072976) 重跑最终 success：十一项同步测试、账号认证、原生标签与 GitHub 发布提交核对、完整 GitHub 附件下载及 preview.4 六个 Gitee 附件逐字节复查均通过。途中 Release 列表请求失败后改为按标签查询；一次大附件读取超时后，后续严格复查成功。凭据认证与下载网络结果分别记录。
+
+当前工作流在 Preview release 成功后仅处理附件，不进行 Git 源码推送。CI 使用显式 manifest-marker 模式：已有最终 SHA256SUMS 必须与原始清单一致且六个附件名齐全，才能跳过该已完成发布；日志明确归档内容未审计。缺失附件或清单不同立即拒绝。该模式也已在本机使用真实 API 验证；安装器和不带该参数的严格复查始终校验实际归档字节。尚未创建新版本以验证首次自动事件及新附件上传，此阶段验收对象是已发布的 preview.4。
+
 ### 原 GitHub Actions 方案的历史检查
 
 `Sync Gitee` 已提交，main 更新触发源码/标签同步；成功的 Preview release 通过 workflow_run 触发可接受附件的镜像。同步为普通推送，不强推、不删除远端独有内容；完整 GitHub 产物先校验，SHA256SUMS 最后上传。

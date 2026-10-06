@@ -6,6 +6,8 @@ GitHub 为开发与发布来源；Gitee 为国内源码和 Console 下载镜像�
 
 2026-10-07 用户确认已配置 Gitee 自带自动镜像，提供的管理页面显示 Pull 方向、源仓库 cong86/frpc-ui，以及最近完成时间 03:48:29。两端 main 提交和 preview.4 标签已核对一致。
 
+后续实际验证：04:24 两端 main 自动到达 `572fb07`，该阶段没有人工推送 Gitee；Actions [preview.4 附件补同步](https://github.com/cong86/frpc-ui/actions/runs/37524072976) 成功。完整证据及网络重试边界见 [验证记录](gitee-validation.md)。
+
 以后只向 GitHub 提交；Gitee 根据自身镜像配置同步代码提交、分支和标签。源码同步不需要 GitHub Actions 的 GITEE_TOKEN。官方说明的镜像触发最短间隔为五分钟，不能保证每次推送立即可见；以镜像管理页完成记录和两端实际提交为准。
 
 Gitee 文档列出的镜像内容不含 Release 描述和二进制附件。发布附件由 GitHub `Sync Gitee` 单独处理，不把源码一致当作附件发布完成。
