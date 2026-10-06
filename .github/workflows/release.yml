@@ -47,3 +47,6 @@ jobs:
           gh release create "$version" --target "$GITHUB_SHA" --title "FRP Console $version" --notes-file docs/release-preview.md --draft --prerelease
           gh release upload "$version" dist/*.tar.gz dist/SHA256SUMS dist/BUILD_INFO.txt dist/install.sh
           gh release edit "$version" --draft=false --prerelease --latest=false
+          if [[ "$version" == v0.1.0-preview.2 ]]; then
+            gh release edit v0.1.0-preview.1 --title 'FRP Console v0.1.0-preview.1 (superseded)' --notes 'Superseded by v0.1.0-preview.2. Use preview.2: it fixes installation permissions when launched with the bootstrap private umask. Existing installations are not modified.'
+          fi

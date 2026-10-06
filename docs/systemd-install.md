@@ -8,7 +8,7 @@
 curl -fsSL https://raw.githubusercontent.com/cong86/frpc-ui/main/scripts/install.sh | sudo bash
 ```
 
-root 可直接 `| bash`。入口默认固定 `v0.1.0-preview.1`，可通过 `bash -s -- --version vX.Y.Z` 选择仓库已发布版本；不使用任意镜像或第三方地址。`--verify-only` 仅下载并检查归档，不启动向导。
+root 可直接 `| bash`。入口默认固定 `v0.1.0-preview.2`，可通过 `bash -s -- --version vX.Y.Z` 选择仓库已发布版本；不使用任意镜像或第三方地址。`--verify-only` 仅下载并检查归档，不启动向导。
 
 Console 归档与 SHA256SUMS 从同一 GitHub Release 经 HTTPS 下载，摘要检查用于发现文件损坏或不匹配，不是独立签名证明。归档只允许单个普通 `frp-console` 文件。无终端、缺少依赖、不支持系统/架构或校验失败时停止，不安装系统依赖、不修改已有服务。
 

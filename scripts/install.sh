@@ -3,7 +3,7 @@
 main() (
   set -Eeuo pipefail
   umask 077
-  console_version=v0.1.0-preview.1
+  console_version=v0.1.0-preview.2
   verify_only=false
   die() { printf 'FRP Console: %s\n' "$*" >&2; exit 1; }
   while (($#)); do

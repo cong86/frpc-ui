@@ -383,7 +383,7 @@ func fixedCommand(ctx context.Context, name string, args ...string) error {
 	return nil
 }
 func put(path string, b []byte, mode os.FileMode) error {
-	if e := os.MkdirAll(filepath.Dir(path), 0755); e != nil {
+	if e := deploymentParents(filepath.Dir(path)); e != nil {
 		return e
 	}
 	f, e := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
@@ -397,6 +397,11 @@ func put(path string, b []byte, mode os.FileMode) error {
 			_ = os.Remove(path)
 		}
 	}()
+	// The bootstrap runs with umask 077; executable and public manifest permissions
+	// must be explicit so the independent unprivileged services can read them.
+	if e := f.Chmod(mode); e != nil {
+		return e
+	}
 	if _, e = f.Write(b); e != nil {
 		return e
 	}
@@ -404,6 +409,32 @@ func put(path string, b []byte, mode os.FileMode) error {
 		return e
 	}
 	ok = true
+	return nil
+}
+
+func deploymentParents(path string) error {
+	missing := []string{}
+	for current := path; ; current = filepath.Dir(current) {
+		info, err := os.Stat(current)
+		if err == nil {
+			if !info.IsDir() {
+				return errors.New("deployment parent is not a directory")
+			}
+			break
+		}
+		if !os.IsNotExist(err) {
+			return err
+		}
+		missing = append(missing, current)
+	}
+	for i := len(missing) - 1; i >= 0; i-- {
+		if err := os.Mkdir(missing[i], 0755); err != nil {
+			return err
+		}
+		if err := os.Chmod(missing[i], 0755); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 func Apply(ctx context.Context, p Plan, confirmation, console string) (Journal, error) {
