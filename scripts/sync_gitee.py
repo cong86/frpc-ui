@@ -18,7 +18,9 @@ TAG = re.compile(r'^v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?$')
 
 
 class MirrorError(Exception):
-    pass
+    def __init__(self, message, http_status=None):
+        super().__init__(message)
+        self.http_status = http_status
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -80,9 +82,9 @@ def api(path, method='GET', value=None, multipart=None, identity=False):
             return json.load(response)
     except urllib.error.HTTPError as error:
         error.close()
-        raise MirrorError(f'Gitee API {method} failed (HTTP {error.code}); response suppressed') from None
-    except (OSError, ValueError):
-        raise MirrorError('Gitee API request failed; inspect remote state before retrying a write') from None
+        raise MirrorError(f'Gitee API {method} failed (HTTP {error.code}); response suppressed', http_status=error.code) from None
+    except (OSError, ValueError) as error:
+        raise MirrorError(f'Gitee API {method} request failed ({type(error).__name__}); inspect remote state before retrying a write') from None
 
 
 def checksums(root):
@@ -152,16 +154,16 @@ def sync_assets(tag, root):
     required = {f'frp-console_{tag}_linux_{a}.tar.gz' for a in ('amd64', 'arm64')} | {f'frp_{version}_linux_{a}.tar.gz' for a in ('amd64', 'arm64')} | {'FRP_VERSION', 'install.sh', 'BUILD_INFO.txt'}
     if set(hashes) != required:
         raise MirrorError('Complete Console/official FRP release assets required')
-    release = None
-    for page in range(1, 11):
-        rows = api(f'/releases?per_page=100&page={page}')
-        if not isinstance(rows, list):
-            raise MirrorError('Invalid release list response')
-        release = next((x for x in rows if x.get('tag_name') == tag), None)
-        if release or len(rows) < 100:
-            break
+    try:
+        release = api('/releases/tags/'+tag)
+    except MirrorError as error:
+        if error.http_status != 404:
+            raise
+        release = None
     if release is None:
         release = api('/releases', 'POST', {'tag_name':tag, 'target_commitish':tag, 'name':'FRP Console '+tag, 'prerelease':True, 'body':'GitHub Console preview mirror. Gitee rejects original official FRP archives; obtain FRP from official GitHub or supply a verified local archive with --frp-archive. SHA256SUMS remains the original complete GitHub manifest. This mirror contains Console, FRP_VERSION, BUILD_INFO.txt, install.sh and SHA256SUMS; FRP archives are not hosted here.'})
+    if not isinstance(release, dict) or release.get('tag_name', tag) != tag:
+        raise MirrorError('Invalid release response')
     release_id = release.get('id')
     if not isinstance(release_id, int):
         raise MirrorError('Release ID unavailable')

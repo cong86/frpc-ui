@@ -83,7 +83,9 @@ class ManifestTests(unittest.TestCase):
             (root/'SHA256SUMS').write_bytes(manifest.encode())
             uploaded=[]
             def api(path,method='GET',value=None,multipart=None):
-                if method=='GET':return []
+                if method=='GET':
+                    self.assertEqual(path,'/releases/tags/'+tag)
+                    raise mirror.MirrorError('Not found',http_status=404)
                 if path=='/releases':return {'id':123,'assets':[]}
                 name,content=multipart;uploaded.append((name,content));return {'name':name}
             with patch.object(mirror,'api',side_effect=api):self.assertEqual(mirror.sync_assets(tag,root),6)
