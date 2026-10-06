@@ -74,6 +74,23 @@ class SourceTests(unittest.TestCase):
 
 
 class ManifestTests(unittest.TestCase):
+    def test_mirror_preserves_manifest_and_excludes_rejected_frp(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);tag='v0.1.0-preview.4'
+            names={f'frp-console_{tag}_linux_{a}.tar.gz' for a in ('amd64','arm64')} | {f'frp_0.71.0_linux_{a}.tar.gz' for a in ('amd64','arm64')} | {'FRP_VERSION','install.sh','BUILD_INFO.txt'}
+            for name in names:(root/name).write_bytes(b'0.71.0\n' if name=='FRP_VERSION' else name.encode())
+            manifest=''.join(hashlib.sha256((root/name).read_bytes()).hexdigest()+'  '+name+'\n' for name in sorted(names))
+            (root/'SHA256SUMS').write_bytes(manifest.encode())
+            uploaded=[]
+            def api(path,method='GET',value=None,multipart=None):
+                if method=='GET':return []
+                if path=='/releases':return {'id':123,'assets':[]}
+                name,content=multipart;uploaded.append((name,content));return {'name':name}
+            with patch.object(mirror,'api',side_effect=api):self.assertEqual(mirror.sync_assets(tag,root),6)
+            self.assertEqual(uploaded[-1],('SHA256SUMS',manifest.encode()))
+            self.assertFalse(any(name.startswith('frp_') for name,_ in uploaded))
+            self.assertEqual({name for name,_ in uploaded},names-{f'frp_0.71.0_linux_{a}.tar.gz' for a in ('amd64','arm64')} | {'SHA256SUMS'})
+
     def test_hash_mismatch_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);(root/'file').write_bytes(b'tampered')

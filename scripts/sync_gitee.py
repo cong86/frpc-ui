@@ -22,6 +22,7 @@ class MirrorError(Exception):
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
+        fp.close()
         raise MirrorError('Authenticated API redirect refused')
 
 
@@ -76,6 +77,7 @@ def api(path, method='GET', value=None, multipart=None):
         with urllib.request.build_opener(NoRedirect()).open(request, timeout=120) as response:
             return json.load(response)
     except urllib.error.HTTPError as error:
+        error.close()
         raise MirrorError(f'Gitee API {method} failed (HTTP {error.code}); response suppressed') from None
     except (OSError, ValueError):
         raise MirrorError('Gitee API request failed; inspect remote state before retrying a write') from None
@@ -128,7 +130,7 @@ def sync_assets(tag, root):
         if release or len(rows) < 100:
             break
     if release is None:
-        release = api('/releases', 'POST', {'tag_name':tag, 'target_commitish':tag, 'name':'FRP Console '+tag, 'prerelease':True, 'body':'GitHub preview mirror. Original official FRP archives are included. SHA256SUMS is uploaded last; use this release only when all listed files are available.'})
+        release = api('/releases', 'POST', {'tag_name':tag, 'target_commitish':tag, 'name':'FRP Console '+tag, 'prerelease':True, 'body':'GitHub Console preview mirror. Gitee rejects original official FRP archives; obtain FRP from official GitHub or supply a verified local archive with --frp-archive. SHA256SUMS remains the original complete GitHub manifest. This mirror contains Console, FRP_VERSION, BUILD_INFO.txt, install.sh and SHA256SUMS; FRP archives are not hosted here.'})
     release_id = release.get('id')
     if not isinstance(release_id, int):
         raise MirrorError('Release ID unavailable')
@@ -136,9 +138,12 @@ def sync_assets(tag, root):
     if not isinstance(assets, list):
         raise MirrorError('Invalid release attachment list')
     existing = {x['name'] for x in assets if isinstance(x, dict) and 'name' in x}
-    # SHA256SUMS is the readiness marker: do not advertise it before every other file.
+    # Gitee's scanner rejects the original official FRP binaries. Do not alter or
+    # split them to bypass that restriction. Keep the original manifest intact.
+    mirrored = required - {f'frp_{version}_linux_{a}.tar.gz' for a in ('amd64', 'arm64')}
+    # SHA256SUMS is uploaded after every supported mirror attachment.
     hashes['SHA256SUMS'] = hashlib.sha256((root/'SHA256SUMS').read_bytes()).hexdigest()
-    for name in sorted(required)+['SHA256SUMS']:
+    for name in sorted(mirrored)+['SHA256SUMS']:
         if name in existing:
             if public_asset_hash(tag, name) != hashes[name]:
                 raise MirrorError('Existing attachment differs; published assets are never overwritten')
@@ -148,7 +153,7 @@ def sync_assets(tag, root):
             if response.get('name') != name:
                 raise MirrorError('Uploaded attachment name did not match')
             print(f'Gitee attachment {name}: uploaded', flush=True)
-    return len(hashes)
+    return len(mirrored)+1
 
 
 def main():

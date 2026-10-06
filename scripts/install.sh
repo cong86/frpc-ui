@@ -3,16 +3,18 @@
 main() (
   set -Eeuo pipefail
   umask 077
-  console_version=v0.1.0-preview.3
+  console_version=v0.1.0-preview.4
   source_name=gitee
+  frp_archive=''
   verify_only=false
   die() { printf 'FRP Console: %s\n' "$*" >&2; exit 1; }
   while (($#)); do
     case "$1" in
       --version) (($# >= 2)) || die '--version requires a value'; console_version=$2; shift 2 ;;
       --source) (($# >= 2)) || die '--source requires gitee or github'; source_name=$2; shift 2 ;;
+      --frp-archive) (($# >= 2)) || die '--frp-archive requires a local file'; frp_archive=$2; shift 2 ;;
       --verify-only) verify_only=true; shift ;;
-      --help) printf 'Usage: bash install.sh [--source gitee|github] [--version vX.Y.Z[-suffix]] [--verify-only]\n'; exit 0 ;;
+      --help) printf 'Usage: bash install.sh [--source gitee|github] [--version vX.Y.Z[-suffix]] [--frp-archive /path/to/official.tar.gz] [--verify-only]\n'; exit 0 ;;
       *) die "Unknown option: $1" ;;
     esac
   done
@@ -24,7 +26,7 @@ main() (
   esac
   [[ $(uname -s) == Linux ]] || die 'Only Linux is supported'
   [[ $(id -u) == 0 ]] || die 'Run with curl ... | sudo bash'
-  for tool in curl sha256sum tar mktemp chmod stat systemctl grep; do
+  for tool in curl sha256sum tar mktemp chmod stat systemctl grep cp; do
     command -v "$tool" >/dev/null || die "Missing dependency: $tool"
   done
   case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die 'Only amd64 and arm64 are supported' ;; esac
@@ -41,7 +43,7 @@ main() (
   asset="frp-console_${console_version}_linux_${arch}.tar.gz"
   download() {
     curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
-      --connect-timeout 15 --max-time 180 --retry 2 "$base/$1" --output "$temp/$1"
+      --connect-timeout 15 --max-time 180 --retry 2 "${2:-$base}/$1" --output "$temp/$1"
   }
   printf 'Downloading FRP Console %s (linux/%s, source=%s)...\n' "$console_version" "$arch" "$source_name"
   download SHA256SUMS
@@ -63,7 +65,16 @@ main() (
   frp_version=$(cat "$temp/FRP_VERSION")
   [[ $frp_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die 'Invalid official FRP version'
   frp_asset="frp_${frp_version}_linux_${arch}.tar.gz"
-  download "$frp_asset"
+  if [[ -n $frp_archive ]]; then
+    [[ -f $frp_archive && ! -L $frp_archive && -r $frp_archive ]] || die 'FRP archive must be a readable regular local file'
+    cp -- "$frp_archive" "$temp/$frp_asset"
+    printf 'Using local official FRP archive; checksum verification is required.\n'
+  elif [[ $source_name == gitee ]]; then
+    printf 'Gitee rejects official FRP attachments. Downloading FRP from official GitHub; use --frp-archive if GitHub is unavailable.\n'
+    download "$frp_asset" "https://github.com/fatedier/frp/releases/download/v${frp_version}"
+  else
+    download "$frp_asset"
+  fi
   verify "$frp_asset"
   [[ $(tar -tzf "$temp/$asset") == frp-console ]] || die 'Unexpected archive members'
   [[ $(tar -tvzf "$temp/$asset") == -* ]] || die 'Archive must contain one regular binary'

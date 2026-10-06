@@ -36,7 +36,13 @@ FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序�
 curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | sudo bash
 ```
 
-入口检测系统和架构，默认从 Gitee 下载固定预览版 Console 和官方 FRP 的 amd64/arm64 归档，核对 SHA-256，再启动安装向导。FRP 缓存自动填入向导，目标机无需再访问 GitHub；也可用 `--source github`。选择角色、填写配置、预览并确认后才安装。无需预装 Go、Node.js；需要 Bash、curl、tar、sha256sum 和运行中的 systemd。
+入口检测系统和架构，默认从 Gitee 下载固定预览版 Console，官方 FRP 从官方 GitHub 下载；两者均校验 SHA-256。Gitee 实际拒绝官方 FRP 附件，无法提供完整在线镜像。GitHub 不可达时，先将对应架构的官方原版 FRP 归档传到目标机，再使用本地缓存：
+
+```sh
+curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | sudo bash -s -- --frp-archive /path/to/frp_0.71.0_linux_amd64.tar.gz
+```
+
+本地归档也必须通过发布摘要与 Go 安装器的官方固定摘要检查；采用缓存时无需访问 GitHub。可用 `--source github` 将 Console 下载源切回 GitHub。选择角色、填写配置、预览并确认后才安装。无需预装 Go、Node.js；需要 Bash、curl、tar、sha256sum 和运行中的 systemd。
 
 只检查下载和摘要、不安装：
 

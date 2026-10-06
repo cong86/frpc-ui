@@ -6,6 +6,8 @@ FRP Console systemd 安装与运行观测预览版，第一版尚未完成。仅
 
 preview.2 修复私有 umask 下安装目录和程序权限被收紧的问题，确保独立低权限服务能够启动；原始配置和计划仍保持私有。
 
-preview.3 增加国内源：安装入口默认选择 Gitee，附带原版官方 FRP 两架构归档并自动作为向导缓存。GitHub/Gitee 均提供同一套完整附件；GitHub 更新后由独立同步工作流推送源码、标签和发布附件，需配置仓库 GITEE_TOKEN。
+preview.3 增加国内源和官方 FRP 缓存。实际发布验证发现 Gitee 拒绝官方 FRP 归档；preview.3 原版安装入口不适用于 Gitee。
+
+preview.4 修正国内源兼容：Gitee 镜像源码、标签、Console 两架构归档和元数据，保留 GitHub 原始完整 SHA256SUMS；官方 FRP 归档只在 GitHub 发布。选 Gitee 时 FRP 从官方 GitHub 获取，也可用 `--frp-archive` 指定原版本地归档，仍强制校验。完整国内在线镜像尚未实现。GitHub 更新由独立同步工作流推送源码、标签和可接受的附件，需配置仓库 GITEE_TOKEN。
 
 仍未开放生产接管、配置运行应用/自动回滚、Compose 自动安装、Nginx 加载或升级/卸载。arm64 构建不代表 arm64 实机验收。

@@ -13,7 +13,7 @@ import time
 import unittest
 
 SCRIPT = Path(__file__).with_name('install.sh').resolve()
-VERSION = 'v0.1.0-preview.3'
+VERSION = 'v0.1.0-preview.4'
 
 
 class BootstrapTests(unittest.TestCase):
@@ -103,6 +103,24 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn(b'Checksum mismatch', r.stderr)
         self.assertFalse(self.marker.exists())
+
+    def test_local_frp_archive_avoids_github_and_checks_digest(self):
+        self.command('curl', 'url=""; output=""; while (($#)); do case "$1" in --output) output=$2; shift 2;; https://*) url=$1; shift;; *) shift;; esac; done; [[ $url == https://gitee.com/* && $url != */frp_0.71.0_* ]] || exit 77; cp "$FIXTURE/${url##*/}" "$output"')
+        archive=self.root/'frp_0.71.0_linux_amd64.tar.gz'
+        result=self.run_script('--verify-only','--frp-archive',str(archive))
+        self.assertEqual(result.returncode,0,result.stderr.decode())
+        archive.write_bytes(b'tampered-local-cache')
+        result=self.run_script('--verify-only','--frp-archive',str(archive))
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn(b'Checksum mismatch',result.stderr)
+        self.assertFalse(self.marker.exists())
+
+    def test_local_frp_symlink_rejected(self):
+        linked=self.root/'linked-frp.tar.gz'
+        linked.symlink_to(self.root/'frp_0.71.0_linux_amd64.tar.gz')
+        result=self.run_script('--verify-only','--frp-archive',str(linked))
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn(b'regular local file',result.stderr)
 
     def test_no_terminal_fails_before_install(self):
         r = self.run_script()
