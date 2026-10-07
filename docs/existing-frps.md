@@ -43,6 +43,14 @@ curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | b
 
 确认绑定原 FRPS 修订、Console 二进制、登记路径、目标目录、timer 和 15 分钟有效期。原配置在预览后变化会被拒绝；UI 安装成功不代表原 FRPS 认证、代理注册或业务访问成功。见 [统一入口验证](unified-install-validation.md)。
 
+## 自动查找配置（preview.9 起）
+
+FRPS TOML 路径留空后，根据指定的 Docker 容器或 systemd 服务查找，显示宿主机候选路径供编号确认；也可选 0 手动填写。未找到时明确提示 FRPS 路径必填，并允许重新输入。Docker 读取已选容器的配置参数、工作目录与挂载，不返回环境变量或完整启动参数；原生服务读取已选单元的 ExecStart 与必要的 WorkingDirectory。查找不递归扫描磁盘、不复制容器内配置，不修改原服务、配置或权限。
+
+Nginx 入口留空可继续查找；输入 0 跳过。Docker 按主配置及各配置目录的独立挂载登记读取范围和映射，可发现常见访问/错误日志路径。仅有 conf.d 时显示站点片段候选，保持 partial。路径、读取根目录、挂载和日志候选先显示并确认，再进入原有预检和完整计划 ID 确认。
+
+配置只在容器内部、启动脚本决定配置、自定义 Nginx -p 前缀或非标准主配置位置时回到手动填写，不推断不存在的宿主机路径。旧 INI 只提示，不自动迁移。找到路径不代表配置被运行进程加载，也不保证权限/语法已通过；后续原有预检继续验证。
+
 ## Profile 示例
 
 以下地址和路径是占位示例，应先只读核对实际部署后填写，不代表现有云端设置：
@@ -67,7 +75,7 @@ curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | b
 }
 ```
 
-原生服务的 runtime/log source 可用 `{"kind":"systemd","name":"frps.service"}`。日志还需 `format`，可选 frps、nginx-access、nginx-error。runtime 留空则不推断进程状态，仍可读取已开启的 FRPS API。Docker inspect 只取 `.State`，不读取环境变量、启动参数或挂载凭据；日志只取最后 100 行。没有登记的来源不访问。
+原生服务的 runtime/log source 可用 `{"kind":"systemd","name":"frps.service"}`。日志还需 `format`，可选 frps、nginx-access、nginx-error。runtime 留空则不推断进程状态，仍可读取已开启的 FRPS API。常规定时采集的 Docker inspect 只取 `.State`；安装向导自动查找额外过滤读取配置参数及挂载路径，不读取环境变量或完整启动参数；日志只取最后 100 行。没有登记的来源不访问。
 
 如果 Docker 仅将站点片段挂载到宿主机，可将 nginx 设置为 `"context":"http-fragments"`、`"entry":"/srv/nginx/conf.d/*.conf"`，并登记对应 roots/mounts。此模式明确标记 partial：未采集完整主配置、HTTP 全局参数及继承关系。不能把片段列表当成完整 nginx 配置。
 

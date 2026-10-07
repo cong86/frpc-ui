@@ -13,7 +13,7 @@ import time
 import unittest
 
 SCRIPT = Path(__file__).with_name('install.sh').resolve()
-VERSION = 'v0.1.0-preview.8'
+VERSION = 'v0.1.0-preview.9'
 
 
 class BootstrapTests(unittest.TestCase):
