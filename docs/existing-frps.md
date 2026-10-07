@@ -66,4 +66,6 @@ frp-console --data /path/to/private-console-data \
 - FRP 关联只根据回环上游端口匹配 HTTP vhost/管理端口，显示候选提示；不证明请求真的经过该代理，也不展开动态变量、Lua、stream 或复杂继承的运行语义。
 - 日志：结构化服务事件和默认 common/combined 格式 Nginx 访问摘要，不返回原始行、URL/查询参数、请求头、IP、用户名或任意错误文本；自定义 log_format 未识别行单独计数。每文件最多读尾部 128 KiB、每来源最多 100 行。窗口响应体字节合计不代表全量 Nginx 流量或速率。
 
-完整写接管、配置应用、日志原文导出、实时连接推送及反代加载仍为后续能力。当前一键安装固定 preview.4；本功能需使用包含该代码的新构建，不能认为旧发布包已更新。
+完整写接管、配置应用、日志原文导出、实时连接推送及反代加载仍为后续能力。preview.5 发布程序包含本功能；旧 preview.4 程序不会自动升级。
+
+程序从 GitHub 或 Gitee 的 preview.5 Release 下载对应 `frp-console_v0.1.0-preview.5_linux_amd64.tar.gz` / `arm64` 归档和 `SHA256SUMS`，校验后解包取得 `frp-console`。只读接入不需要下载或安装新的官方 FRP。按本文单独登记 Profile 与快照，不重新运行面向新部署的 `install wizard`；一键入口仍仅执行新安装，不自动发现或接管生产实例。
