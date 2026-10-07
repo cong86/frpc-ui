@@ -3,10 +3,11 @@
 main() (
   set -Eeuo pipefail
   umask 077
-  console_version=v0.1.0-preview.5
+  console_version=v0.1.0-preview.6
   source_name=gitee
   frp_archive=''
   verify_only=false
+  mode=auto
   die() { printf 'FRP Console: %s\n' "$*" >&2; exit 1; }
   while (($#)); do
     case "$1" in
@@ -14,11 +15,13 @@ main() (
       --source) (($# >= 2)) || die '--source requires gitee or github'; source_name=$2; shift 2 ;;
       --frp-archive) (($# >= 2)) || die '--frp-archive requires a local file'; frp_archive=$2; shift 2 ;;
       --verify-only) verify_only=true; shift ;;
-      --help) printf 'Usage: bash install.sh [--source gitee|github] [--version vX.Y.Z[-suffix]] [--frp-archive /path/to/official.tar.gz] [--verify-only]\n'; exit 0 ;;
+      --mode) (($# >= 2)) || die '--mode requires new or adopt'; mode=$2; shift 2 ;;
+      --help) printf 'Usage: bash install.sh [--mode new|adopt] [--source gitee|github] [--version vX.Y.Z[-suffix]] [--frp-archive /path/to/official.tar.gz] [--verify-only]\n'; exit 0 ;;
       *) die "Unknown option: $1" ;;
     esac
   done
   [[ $console_version =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9][a-zA-Z0-9.-]*)?$ ]] || die 'Invalid release version'
+  [[ $mode == auto || $mode == new || $mode == adopt ]] || die 'Mode must be new or adopt'
   case "$source_name" in
     gitee) base="https://gitee.com/wangcong886/frpc-ui/releases/download/${console_version}" ;;
     github) base="https://github.com/cong86/frpc-ui/releases/download/${console_version}" ;;
@@ -37,7 +40,13 @@ main() (
   if ! $verify_only; then
     { exec 3<>/dev/tty; } 2>/dev/null || die 'An interactive terminal is required; use --verify-only to check downloads'
     [[ -t 3 ]] || die 'An interactive terminal is required'
+    if [[ $mode == auto ]]; then
+      printf 'FRP Console deployment:\n  1) New FRPC / FRPS installation\n  2) Existing FRPS + Nginx read-only management\nSelect [1]: ' >&3
+      IFS= read -r selection <&3 || die 'Selection unavailable; no installation performed'
+      case ${selection:-1} in 1) mode=new ;; 2) mode=adopt ;; *) die 'Select 1 or 2' ;; esac
+    fi
   fi
+  [[ $mode != auto ]] || mode=new
   temp=$(mktemp -d /var/tmp/frp-console-bootstrap.XXXXXXXX)
   trap 'rm -rf -- "$temp"' EXIT
   asset="frp-console_${console_version}_linux_${arch}.tar.gz"
@@ -60,36 +69,44 @@ main() (
     printf '%s  %s\n' "$expected" "$temp/$1" | sha256sum --check --status || die 'Checksum mismatch; nothing executed'
   }
   verify "$asset"
-  download FRP_VERSION
-  verify FRP_VERSION
-  frp_version=$(cat "$temp/FRP_VERSION")
-  [[ $frp_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die 'Invalid official FRP version'
-  frp_asset="frp_${frp_version}_linux_${arch}.tar.gz"
-  if [[ -n $frp_archive ]]; then
-    [[ -f $frp_archive && ! -L $frp_archive && -r $frp_archive ]] || die 'FRP archive must be a readable regular local file'
-    cp -- "$frp_archive" "$temp/$frp_asset"
-    printf 'Using local official FRP archive; checksum verification is required.\n'
-  elif [[ $source_name == gitee ]]; then
-    printf 'Gitee rejects official FRP attachments. Downloading FRP from official GitHub; use --frp-archive if GitHub is unavailable.\n'
-    download "$frp_asset" "https://github.com/fatedier/frp/releases/download/v${frp_version}"
-  else
-    download "$frp_asset"
-  fi
-  verify "$frp_asset"
   [[ $(tar -tzf "$temp/$asset") == frp-console ]] || die 'Unexpected archive members'
   [[ $(tar -tvzf "$temp/$asset") == -* ]] || die 'Archive must contain one regular binary'
   tar -xzf "$temp/$asset" --no-same-owner --no-same-permissions -C "$temp"
   [[ -f $temp/frp-console && ! -L $temp/frp-console && $(stat -c %h "$temp/frp-console") == 1 ]] || die 'Invalid binary'
   chmod 0755 "$temp/frp-console"
-  if $verify_only; then
-    printf 'Download and SHA-256 verified; no installation performed.\n'
-    exit 0
+  if [[ $mode == adopt ]]; then
+    if $verify_only; then printf 'Console download and SHA-256 verified for adoption; no FRP downloaded or installation performed.\n'; exit 0; fi
+  else
+    download FRP_VERSION
+    verify FRP_VERSION
+    frp_version=$(cat "$temp/FRP_VERSION")
+    [[ $frp_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die 'Invalid official FRP version'
+    frp_asset="frp_${frp_version}_linux_${arch}.tar.gz"
+    if [[ -n $frp_archive ]]; then
+      [[ -f $frp_archive && ! -L $frp_archive && -r $frp_archive ]] || die 'FRP archive must be a readable regular local file'
+      cp -- "$frp_archive" "$temp/$frp_asset"
+      printf 'Using local official FRP archive; checksum verification is required.\n'
+    elif [[ $source_name == gitee ]]; then
+      printf 'Gitee rejects official FRP attachments. Downloading FRP from official GitHub; use --frp-archive if GitHub is unavailable.\n'
+      download "$frp_asset" "https://github.com/fatedier/frp/releases/download/v${frp_version}"
+    else
+      download "$frp_asset"
+    fi
+    verify "$frp_asset"
+    if $verify_only; then
+      printf 'Download and SHA-256 verified; no installation performed.\n'
+      exit 0
+    fi
   fi
   [[ -d /root && ! -L /root && $(stat -c %u /root) == 0 ]] || die 'A root-owned /root directory is required'
-  mode=$(stat -c %a /root)
-  (( (8#$mode & 8#022) == 0 )) || die '/root must not be writable by other users'
+  root_mode=$(stat -c %a /root)
+  (( (8#$root_mode & 8#022) == 0 )) || die '/root must not be writable by other users'
   plan="/root/frp-console-install-${temp##*/}.json"
   printf 'Download verified. Starting installation wizard; private plan: %s\n' "$plan"
-  "$temp/frp-console" install wizard --archive "$temp/$frp_asset" --out "$plan" <&3 >&3 2>&3
+  if [[ $mode == adopt ]]; then
+    "$temp/frp-console" install adopt-wizard --out "$plan" <&3 >&3 2>&3
+  else
+    "$temp/frp-console" install wizard --archive "$temp/$frp_asset" --out "$plan" <&3 >&3 2>&3
+  fi
 )
 main "$@"

@@ -13,7 +13,7 @@ import time
 import unittest
 
 SCRIPT = Path(__file__).with_name('install.sh').resolve()
-VERSION = 'v0.1.0-preview.5'
+VERSION = 'v0.1.0-preview.6'
 
 
 class BootstrapTests(unittest.TestCase):
@@ -44,7 +44,7 @@ class BootstrapTests(unittest.TestCase):
         f.chmod(0o755)
 
     def archive(self, arch, member='frp-console'):
-        body = b'#!/usr/bin/env bash\n[[ -t 0 ]] || exit 42\n[[ "$1 $2" == "install wizard" ]] || exit 43\nprintf "tty-ok" > "$MARKER"\n'
+        body = b'#!/usr/bin/env bash\n[[ -t 0 ]] || exit 42\n[[ "$1 $2" == "${EXPECT_COMMAND:-install wizard}" ]] || exit 43\nprintf "tty-ok" > "$MARKER"\n'
         with tarfile.open(self.root / f'frp-console_{VERSION}_linux_{arch}.tar.gz', 'w:gz') as tar:
             info = tarfile.TarInfo(member)
             info.size, info.mode = len(body), 0o755
@@ -97,6 +97,16 @@ class BootstrapTests(unittest.TestCase):
     def test_unknown_source_rejected(self):
         self.assertNotEqual(self.run_script('--verify-only', '--source', 'third-party').returncode, 0)
 
+    def test_invalid_deployment_mode_rejected(self):
+        self.assertNotEqual(self.run_script('--verify-only','--mode','anything'),0)
+
+    def test_adoption_downloads_console_only(self):
+        self.command('curl', 'url=""; output=""; while (($#)); do case "$1" in --output) output=$2; shift 2;; https://*) url=$1; shift;; *) shift;; esac; done; [[ $url != */FRP_VERSION && $url != */frp_0.71.0_* ]] || exit 77; cp "$FIXTURE/${url##*/}" "$output"')
+        result=self.run_script('--mode','adopt','--verify-only')
+        self.assertEqual(result.returncode,0,result.stderr.decode())
+        self.assertFalse(self.marker.exists())
+        self.assertIn(b'no FRP downloaded',result.stdout)
+
     def test_corrupt_frp_archive_never_executes(self):
         (self.root/'frp_0.71.0_linux_amd64.tar.gz').write_bytes(b'tampered')
         r = self.run_script('--verify-only')
@@ -129,10 +139,18 @@ class BootstrapTests(unittest.TestCase):
         self.assertFalse(self.marker.exists())
 
     def test_curl_pipe_keeps_terminal_for_wizard(self):
+        self.check_pipe('1')
+
+    def test_curl_pipe_selects_adoption_wizard(self):
+        self.env['EXPECT_COMMAND']='install adopt-wizard'
+        self.check_pipe('2')
+
+    def check_pipe(self, mode):
         pid, fd = pty.fork()
         if pid == 0:
             os.execvpe('bash', ['bash', '-c', 'cat "$BOOTSTRAP" | bash'], dict(self.env, BOOTSTRAP=str(SCRIPT)))
         transcript = b''
+        selected=False
         try:
             deadline = time.monotonic()+15
             while time.monotonic() < deadline:
@@ -144,6 +162,9 @@ class BootstrapTests(unittest.TestCase):
                     if not data:
                         break
                     transcript += data
+                    if not selected and b'Select [1]:' in transcript:
+                        os.write(fd,(mode+'\n').encode())
+                        selected=True
             done, status = os.waitpid(pid, os.WNOHANG)
             while not done and time.monotonic() < deadline:
                 time.sleep(.01)

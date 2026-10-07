@@ -17,6 +17,9 @@ import (
 )
 
 func CLI(args []string) error {
+	if len(args) > 0 && strings.HasPrefix(args[0], "adopt-") {
+		return AdoptionCLI(args)
+	}
 	if len(args) == 0 {
 		return errors.New("use install wizard, install plan, or install apply")
 	}

@@ -2,7 +2,7 @@
 
 FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序；SQLite 保存用户、审计与操作元数据。官方 FRP 独立运行。
 
-**当前为 systemd 新安装与验证里程碑，第一版尚未完成；生产接管仍未开放。**
+**当前支持 systemd 新安装与已有 FRPS/Nginx 只读接入；第一版尚未完成，已有部署写接管仍未开放。**
 
 ## 当前可以使用
 
@@ -26,7 +26,7 @@ FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序�
 - 旧 INI 迁移、已有部署写接管、同角色多实例、网页安装执行、运行应用、新安装实例日志、Compose 自动安装、Nginx 校验/加载、升级/卸载尚未实现。
 - 部署模板含明确凭据占位符，Compose 镜像摘要固定待实现；不能直接用于生产。
 - 无清单的 demo/导入保持运行未验证。新安装显示实测层级；未登记探针或证据不足仍未验证。运行结果描述当前进程和固定登记目标，不证明离线修改已应用或全部参数与文件相同。
-- 从 preview.5 起，发布程序包含 `observe` 和 `--observed-snapshot` 独立只读接入模式，显示采集时间、过期状态及分层证据；需按 [接入说明](docs/existing-frps.md) 单独配置采集。
+- 从 preview.6 起，一键入口可安装独立只读 UI 和定时采集服务，显示采集时间、过期状态及分层证据；已有 FRPS、Nginx 配置及运行服务不变。
 
 完整规格与开发清单见 [docs/v1-spec.md](docs/v1-spec.md)。
 
@@ -38,7 +38,12 @@ FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序�
 curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | sudo bash
 ```
 
-入口检测系统和架构，默认从 Gitee 下载固定预览版 Console，官方 FRP 从官方 GitHub 下载；两者均校验 SHA-256。Gitee 实际拒绝官方 FRP 附件，无法提供完整在线镜像。GitHub 不可达时，先将对应架构的官方原版 FRP 归档传到目标机，再使用本地缓存：
+入口检测系统和架构，默认下载 preview.6，先选择操作模式，再下载并校验 SHA-256：
+
+- **新安装**：选择 FRPC / FRPS / 两者、填写连接参数与 Token，预览并确认后安装独立 FRP 与 Console 服务。
+- **已有 FRPS 只读接入**：填写现有 TOML 路径、systemd 单元或 Docker 容器名、Nginx 配置与日志路径，预览并确认后安装低权限 UI 和定时采集服务。此模式只下载 Console，无需下载或重装官方 FRP。未启用的管理 API 保持未验证，程序不自动修改原配置。
+
+可用 `--mode new` / `--mode adopt` 直接选择模式。默认从 Gitee 下载 Console；新安装的官方 FRP 从官方 GitHub 下载。Gitee 实际拒绝官方 FRP 附件，无法提供完整在线镜像。新安装时 GitHub 不可达，先将对应架构的官方原版 FRP 归档传到目标机，再使用本地缓存：
 
 ```sh
 curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | sudo bash -s -- --frp-archive /path/to/frp_0.71.0_linux_amd64.tar.gz
@@ -46,7 +51,7 @@ curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | s
 
 本地归档也必须通过发布摘要与 Go 安装器的官方固定摘要检查；采用缓存时无需访问 GitHub。可用 `--source github` 将 Console 下载源切回 GitHub。选择角色、填写配置、预览并确认后才安装。无需预装 Go、Node.js；需要 Bash、curl、tar、sha256sum 和运行中的 systemd。
 
-一键入口默认下载 preview.5，用于独立新安装；已有部署只读接入请直接使用发布程序并按 [接入说明](docs/existing-frps.md) 配置，不重新运行新安装向导。现有安装不会自动升级。
+现有 Console 不会自动升级。接入安装拒绝覆盖现有目录、用户和服务；成功的原计划可以幂等重试，重新启动向导不等于升级。接入详情见 [接入说明](docs/existing-frps.md)。
 
 只检查下载和摘要、不安装：
 
@@ -54,7 +59,9 @@ curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | s
 curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | sudo bash -s -- --verify-only
 ```
 
-程序临时文件在退出时清理；原始安装计划保存到 `/root/frp-console-install-*.json`，权限 0600。当前不是完整第一版，安装后 UI 仍通过回环地址和 SSH 隧道访问，不能接管已有部署。详情见 [安装说明](docs/systemd-install.md)、[一键入口验证](docs/bootstrap-validation.md) 与 [自动同步设置](docs/gitee-sync.md)。
+仅验证接入模式的 Console 下载：在上述命令后加 `--mode adopt --verify-only`，不会下载官方 FRP。
+
+程序临时文件在退出时清理；私有安装计划保存到 `/root/frp-console-install-*.json`，权限 0600。安装后 UI 通过回环地址和 SSH 隧道访问。详情见 [安装说明](docs/systemd-install.md)、[统一入口验证](docs/unified-install-validation.md) 与 [自动同步设置](docs/gitee-sync.md)。
 
 ## 构建
 
