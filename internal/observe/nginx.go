@@ -112,7 +112,7 @@ func lex(raw string) ([]token, error) {
 			if c == '$' && i+1 < len(raw) && raw[i+1] == '{' {
 				end := strings.IndexByte(raw[i+2:], '}')
 				if end < 0 {
-					return nil, errors.New("unsupported variable")
+					return nil, errors.New("不支持此变量")
 				}
 				end += i + 3
 				b.WriteString(raw[i:end])
@@ -126,11 +126,11 @@ func lex(raw string) ([]token, error) {
 			i++
 		}
 		if quote != 0 {
-			return nil, errors.New("unterminated quote")
+			return nil, errors.New("引号未闭合")
 		}
 		out = append(out, token{b.String(), false})
 		if len(out) > 100000 {
-			return nil, errors.New("too many directives")
+			return nil, errors.New("配置指令数量超出限制")
 		}
 	}
 	return out, nil
@@ -144,19 +144,19 @@ func parse(raw, file string) ([]directive, error) {
 	var block func(bool, int) ([]directive, error)
 	block = func(nested bool, depth int) ([]directive, error) {
 		if depth > 32 {
-			return nil, errors.New("configuration nesting limit")
+			return nil, errors.New("配置嵌套超出层数限制")
 		}
 		var result []directive
 		for i < len(t) {
 			if t[i].symbol && t[i].text == "}" {
 				if !nested {
-					return nil, errors.New("unexpected closing block")
+					return nil, errors.New("配置块结束符不符合预期")
 				}
 				i++
 				return result, nil
 			}
 			if t[i].symbol {
-				return nil, errors.New("missing directive name")
+				return nil, errors.New("缺少配置指令名称")
 			}
 			d := directive{name: t[i].text, file: file}
 			i++
@@ -165,7 +165,7 @@ func parse(raw, file string) ([]directive, error) {
 				i++
 			}
 			if i == len(t) {
-				return nil, errors.New("incomplete directive")
+				return nil, errors.New("配置指令不完整")
 			}
 			s := t[i].text
 			i++
@@ -175,12 +175,12 @@ func parse(raw, file string) ([]directive, error) {
 					return nil, e
 				}
 			} else if s != ";" {
-				return nil, errors.New("invalid directive termination")
+				return nil, errors.New("指令结尾无效")
 			}
 			result = append(result, d)
 		}
 		if nested {
-			return nil, errors.New("unclosed block")
+			return nil, errors.New("配置块未闭合")
 		}
 		return result, nil
 	}
@@ -219,7 +219,7 @@ func (r *nginxReader) resolve(path string) (string, error) {
 			return filepath.Clean(path), nil
 		}
 	}
-	return "", errors.New("include outside registered roots")
+	return "", errors.New("引用文件超出登记的根目录")
 }
 
 func virtualRelative(value, root string) (string, bool) {
@@ -234,7 +234,7 @@ func virtualRelative(value, root string) (string, bool) {
 }
 func (r *nginxReader) read(path string, stack map[string]bool, depth int) ([]directive, error) {
 	if depth > 12 || len(r.files) >= 128 {
-		return nil, errors.New("include limit exceeded")
+		return nil, errors.New("引用文件数量超出限制")
 	}
 	path, e := r.resolve(path)
 	if e != nil {
@@ -242,7 +242,7 @@ func (r *nginxReader) read(path string, stack map[string]bool, depth int) ([]dir
 	}
 	resolved, e := filepath.EvalSymlinks(path)
 	if e != nil {
-		return nil, errors.New("include unavailable")
+		return nil, errors.New("引用文件不可读取")
 	}
 	allowed := false
 	for _, root := range r.profile.Roots {
@@ -251,22 +251,22 @@ func (r *nginxReader) read(path string, stack map[string]bool, depth int) ([]dir
 		}
 	}
 	if !allowed {
-		return nil, errors.New("symlink outside registered roots")
+		return nil, errors.New("符号链接超出登记的根目录")
 	}
 	if stack[resolved] {
-		return nil, errors.New("include cycle")
+		return nil, errors.New("引用文件存在循环")
 	}
 	// Configuration reads are administrator-controlled; log and key paths are not opened.
 	if r.trust(resolved) != nil {
-		return nil, errors.New("include is not a protected root-owned file")
+		return nil, errors.New("引用文件不是受保护且归 root 所有的文件")
 	}
 	st, e := os.Stat(resolved)
 	if e != nil || st.Size() > config.MaxSize || r.bytes+int(st.Size()) > 4<<20 {
-		return nil, errors.New("configuration size limit")
+		return nil, errors.New("配置超出大小限制")
 	}
 	b, e := readConfigBytes(resolved)
 	if e != nil {
-		return nil, errors.New("include unreadable")
+		return nil, errors.New("引用文件无法读取")
 	}
 	r.files[resolved] = config.Revision(string(b))
 	r.bytes += len(b)
@@ -283,26 +283,26 @@ func (r *nginxReader) expand(nodes []directive, stack map[string]bool, depth int
 	for _, d := range nodes {
 		if d.name == "include" {
 			if len(d.args) != 1 || strings.Contains(d.args[0], "$") {
-				r.issues = append(r.issues, "Unsupported include expression")
+				r.issues = append(r.issues, "不支持此引用文件表达式")
 				continue
 			}
 			p, e := r.resolve(d.args[0])
 			if e != nil {
-				r.issues = append(r.issues, "Include outside registered roots")
+				r.issues = append(r.issues, "引用文件超出登记的根目录")
 				continue
 			}
 			matches, e := filepath.Glob(p)
 			if e != nil || len(matches) > 128 {
-				r.issues = append(r.issues, "Invalid or oversized include pattern")
+				r.issues = append(r.issues, "引用文件匹配表达式无效或超出大小限制")
 				continue
 			}
 			if len(matches) == 0 && !strings.ContainsAny(p, "*?[") {
-				r.issues = append(r.issues, "Required include unavailable")
+				r.issues = append(r.issues, "必要的引用文件不可读取")
 			}
 			for _, file := range matches {
 				children, e := r.read(file, stack, depth+1)
 				if e != nil {
-					r.issues = append(r.issues, "Include unreadable, unsupported or outside scope")
+					r.issues = append(r.issues, "引用文件不可读、不受支持或超出读取范围")
 					continue
 				}
 				out = append(out, children...)
@@ -357,7 +357,7 @@ func readConfigBytes(path string) ([]byte, error) {
 	defer f.Close()
 	b, e := io.ReadAll(io.LimitReader(f, config.MaxSize+1))
 	if e != nil || len(b) > config.MaxSize {
-		return nil, errors.New("configuration read limit exceeded")
+		return nil, errors.New("配置读取超出限制")
 	}
 	return b, nil
 }
@@ -376,33 +376,33 @@ func readNginx(p NginxProfile, d *config.Document, trust func(string) error) Ngi
 		} else {
 			files, err := filepath.Glob(pattern)
 			if err != nil || len(files) == 0 || len(files) > 128 {
-				e = errors.New("fragment selection unavailable")
+				e = errors.New("站点片段选择不可读取")
 			} else {
 				var fragments []directive
 				for _, file := range files {
 					v, err := r.read(file, map[string]bool{}, 0)
 					if err != nil {
-						r.issues = append(r.issues, "Site fragment unreadable or unsupported")
+						r.issues = append(r.issues, "站点片段不可读或不受支持")
 						continue
 					}
 					fragments = append(fragments, v...)
 				}
 				nodes = []directive{{name: "http", children: fragments}}
-				r.issues = append(r.issues, "HTTP site fragments only; main configuration and inherited directives were not collected")
+				r.issues = append(r.issues, "仅读取 HTTP 站点片段；未采集主配置及继承指令")
 			}
 		}
 	} else {
 		nodes, e = r.read(p.Entry, map[string]bool{}, 0)
 	}
 	if e != nil {
-		s.Issues = []string{"Nginx entry unreadable, unsupported or outside scope"}
+		s.Issues = []string{"Nginx 入口不可读、不受支持或超出读取范围"}
 		return s
 	}
 	// Parse disk configuration only: never invoke nginx -t/-T/reload or read certificate keys.
 	for path, rev := range r.files {
 		b, e := readConfigBytes(path)
 		if e != nil || config.Revision(string(b)) != rev {
-			s.Issues = []string{"Nginx configuration changed during collection"}
+			s.Issues = []string{"Nginx 配置在采集期间发生变化"}
 			return s
 		}
 	}
@@ -472,11 +472,11 @@ func readNginx(p NginxProfile, d *config.Document, trust func(string) error) Ngi
 								if host == "localhost" || (ip != nil && ip.IsLoopback()) {
 									n, _ := strconv.Atoi(port)
 									if n > 0 && n == intNumber(d.Values["vhostHTTPPort"]) {
-										v.FRPHint = "Possible FRP HTTP vhost route; business not verified"
+										v.FRPHint = "可能关联 FRP HTTP 虚拟主机路由；业务未验证"
 									}
 									web, _ := d.Values["webServer"].(map[string]any)
 									if n > 0 && n == intNumber(web["port"]) {
-										v.FRPHint = "Possible FRPS management route; business not verified"
+										v.FRPHint = "可能关联 FRPS 管理路由；业务未验证"
 									}
 								}
 							}
@@ -496,13 +496,13 @@ func readNginx(p NginxProfile, d *config.Document, trust func(string) error) Ngi
 	if len(s.Sites) > 512 {
 		s.Sites = s.Sites[:512]
 		s.Status = "partial"
-		s.Issues = append(s.Issues, "Site display limit reached")
+		s.Issues = append(s.Issues, "已达到站点展示数量上限")
 	}
 	sort.SliceStable(s.Sites, func(i, j int) bool { return s.Sites[i].File < s.Sites[j].File })
 	if s.Issues == nil {
 		s.Issues = []string{}
 	}
-	s.ProcessCheck = managed.Check{Status: "not_checked", At: time.Now().Unix(), Evidence: "No runtime target registered"}
+	s.ProcessCheck = managed.Check{Status: "not_checked", At: time.Now().Unix(), Evidence: "未登记运行目标"}
 	return s
 }
 func intNumber(v any) int {

@@ -32,7 +32,7 @@ var accessLine = regexp.MustCompile(`\[([0-9]{2}/[A-Za-z]{3}/[0-9]{4}:[0-9]{2}:[
 var logTime = regexp.MustCompile(`(?:[0-9]{4}[-/][0-9]{2}[-/][0-9]{2}[ T][0-9:.+-]{8,24}|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z)`)
 
 func ParseLogs(raw, format string) LogWindow {
-	w := LogWindow{Format: format, Available: true, Events: []LogEvent{}, Note: "Bounded recent log window; raw lines, addresses, request URLs and headers are not returned. Bytes are response-body bytes in this window, not a live rate."}
+	w := LogWindow{Format: format, Available: true, Events: []LogEvent{}, Note: "仅采集有限的近期日志；不返回原始行、地址、请求网址或头部。字节数表示窗口内响应体字节合计，不是实时速率。"}
 	lines := strings.Split(strings.TrimSpace(raw), "\n")
 	if len(lines) > 100 {
 		lines = lines[len(lines)-100:]
@@ -54,7 +54,7 @@ func ParseLogs(raw, format string) LogWindow {
 			v.Status, _ = strconv.Atoi(m[3])
 			v.Bytes, _ = strconv.ParseInt(m[4], 10, 64)
 			v.Level = "access"
-			v.Event = "HTTP access"
+			v.Event = "HTTP 访问"
 			w.Bytes += v.Bytes
 		} else {
 			v.Time = logTime.FindString(line)
@@ -68,21 +68,21 @@ func ParseLogs(raw, format string) LogWindow {
 			}
 			switch {
 			case strings.Contains(lower, "client login") || strings.Contains(lower, "login to server success"):
-				v.Event = "Client authentication event"
+				v.Event = "客户端认证事件"
 			case strings.Contains(lower, "new proxy") || strings.Contains(lower, "start proxy") || strings.Contains(lower, "proxy added"):
-				v.Event = "Proxy registration event"
+				v.Event = "代理注册事件"
 			case strings.Contains(lower, "proxy removed") || strings.Contains(lower, "proxy closed"):
-				v.Event = "Proxy removal event"
+				v.Event = "代理移除事件"
 			case strings.Contains(lower, "upstream timed out"):
-				v.Event = "Upstream timeout"
+				v.Event = "上游响应超时"
 			case strings.Contains(lower, "connect() failed"):
-				v.Event = "Upstream connection failure"
+				v.Event = "上游连接失败"
 			case strings.Contains(lower, "ssl") || strings.Contains(lower, "certificate"):
-				v.Event = "TLS event"
+				v.Event = "TLS 事件"
 			case v.Level == "error" || v.Level == "fatal":
-				v.Event = "Error event (details withheld)"
+				v.Event = "错误事件（详细内容已隐藏）"
 			default:
-				v.Event = "Service log event (details withheld)"
+				v.Event = "服务日志事件（详细内容已隐藏）"
 			}
 		}
 		w.Events = append(w.Events, v)
@@ -91,7 +91,7 @@ func ParseLogs(raw, format string) LogWindow {
 	return w
 }
 func ReadLogs(ctx context.Context, s LogSource, run Runner) LogWindow {
-	w := LogWindow{Format: s.Format, Source: s.Kind, Events: []LogEvent{}, Note: "Log source unavailable; no raw errors returned"}
+	w := LogWindow{Format: s.Format, Source: s.Kind, Events: []LogEvent{}, Note: "日志来源不可读取；不返回原始错误信息"}
 	var b []byte
 	var e error
 	switch s.Kind {

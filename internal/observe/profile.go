@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/cong86/frpc-ui/internal/cli"
 	"github.com/cong86/frpc-ui/internal/config"
 	"github.com/cong86/frpc-ui/internal/filelock"
 	"github.com/cong86/frpc-ui/internal/managed"
@@ -56,35 +57,35 @@ func checkTarget(t Target) error {
 		return nil
 	}
 	if (t.Kind != "docker" && t.Kind != "systemd") || !identifier.MatchString(t.Name) {
-		return errors.New("invalid runtime target")
+		return errors.New("运行目标无效")
 	}
 	if t.Kind == "systemd" && filepath.Ext(t.Name) != ".service" {
-		return errors.New("systemd observation requires a service unit")
+		return errors.New("systemd 采集目标必须是服务单元")
 	}
 	return nil
 }
 func (p Profile) Validate() error {
 	if p.Version != 1 || !filepath.IsAbs(p.Config) || len(p.Logs) > 12 {
-		return errors.New("invalid observation profile")
+		return errors.New("采集配置无效")
 	}
 	if e := checkTarget(p.Runtime); e != nil {
 		return e
 	}
 	if n := p.Nginx; n != nil {
 		if n.Context != "" && n.Context != "http-fragments" {
-			return errors.New("unsupported nginx observation context")
+			return errors.New("不支持此 Nginx 采集类型")
 		}
 		if !filepath.IsAbs(n.Entry) || !filepath.IsAbs(n.Prefix) || len(n.Roots) == 0 || len(n.Roots) > 16 || len(n.Mounts) > 16 {
-			return errors.New("invalid nginx read scope")
+			return errors.New("Nginx 读取范围无效")
 		}
 		for _, r := range n.Roots {
 			if !filepath.IsAbs(r) {
-				return errors.New("nginx roots must be absolute")
+				return errors.New("Nginx 根目录必须是绝对路径")
 			}
 		}
 		for _, m := range n.Mounts {
 			if !filepath.IsAbs(m.Inside) || !filepath.IsAbs(m.Host) {
-				return errors.New("nginx mounts must be absolute")
+				return errors.New("Nginx 挂载路径必须是绝对路径")
 			}
 		}
 		if e := checkTarget(n.Runtime); e != nil {
@@ -93,39 +94,39 @@ func (p Profile) Validate() error {
 	}
 	for _, l := range p.Logs {
 		if l.Format != "frps" && l.Format != "nginx-access" && l.Format != "nginx-error" {
-			return errors.New("unsupported log format")
+			return errors.New("不支持此日志格式")
 		}
 		if l.Kind == "file" {
 			if !filepath.IsAbs(l.Name) {
-				return errors.New("log path must be absolute")
+				return errors.New("日志路径必须是绝对路径")
 			}
 		} else if e := checkTarget(Target{l.Kind, l.Name}); e != nil || l.Kind == "" {
-			return errors.New("invalid log target")
+			return errors.New("日志目标无效")
 		}
 	}
 	return nil
 }
 func readJSON(path string, out any) error {
 	if !filepath.IsAbs(path) || managed.TrustedFile(path) != nil {
-		return errors.New("observation metadata must be protected root-owned files")
+		return errors.New("采集元数据必须是受保护且归 root 所有的文件")
 	}
 	f, e := os.Open(path)
 	if e != nil {
-		return errors.New("observation file unavailable")
+		return errors.New("采集文件不可读取")
 	}
 	defer f.Close()
 	st, e := f.Stat()
 	if e != nil || st.Size() > 4<<20 {
-		return errors.New("observation file too large")
+		return errors.New("采集文件超出大小限制")
 	}
 	d := json.NewDecoder(io.LimitReader(f, 4<<20))
 	d.DisallowUnknownFields()
 	if d.Decode(out) != nil {
-		return errors.New("invalid observation JSON")
+		return errors.New("采集 JSON 无效")
 	}
 	var extra any
 	if d.Decode(&extra) != io.EOF {
-		return errors.New("invalid trailing observation data")
+		return errors.New("采集文件包含无效的尾随数据")
 	}
 	return nil
 }
@@ -146,7 +147,7 @@ func command(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd.Stdout = &b
 	cmd.Stderr = &b
 	if cmd.Run() != nil || b.Overflow {
-		return nil, errors.New("read-only command unavailable")
+		return nil, errors.New("只读命令不可用")
 	}
 	return b.Data, nil
 }
@@ -172,23 +173,27 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 
 func CLI(args []string) error {
 	fs := flag.NewFlagSet("observe", flag.ContinueOnError)
-	profile := fs.String("profile", "", "protected administrator profile")
-	out := fs.String("out", "", "protected redacted snapshot path")
+	cli.Configure(fs)
+	profile := fs.String("profile", "", "受保护的管理员采集配置")
+	out := fs.String("out", "", "受保护的脱敏快照路径")
 	if e := fs.Parse(args); e != nil {
-		return e
+		if e == flag.ErrHelp {
+			return e
+		}
+		return errors.New(cli.Text(e.Error()))
 	}
 	if fs.NArg() != 0 || *profile == "" || *out == "" {
-		return errors.New("use observe --profile /absolute/profile.json --out /absolute/snapshot.json")
+		return errors.New("用法：observe --profile /absolute/profile.json --out /absolute/snapshot.json")
 	}
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
-		return errors.New("observation collection requires Linux root")
+		return errors.New("采集需要 Linux root 权限")
 	}
 	p, e := LoadProfile(*profile)
 	if e != nil {
 		return e
 	}
 	if !filepath.IsAbs(*out) || filepath.Clean(*out) == filepath.Clean(*profile) || filepath.Clean(*out) == filepath.Clean(p.Config) {
-		return errors.New("invalid snapshot output")
+		return errors.New("快照输出路径无效")
 	}
 	// Verify the output directory before collection and never replace an unrelated file.
 	if e = managed.TrustedFile(*profile); e != nil {
@@ -199,18 +204,18 @@ func CLI(args []string) error {
 	}
 	release, e := filelock.Acquire(*out + ".collect-lock")
 	if e != nil {
-		return errors.New("snapshot collection already in progress")
+		return errors.New("快照采集正在进行中")
 	}
 	defer release()
 	var previous *Snapshot
 	if _, e = os.Lstat(*out); e == nil {
 		v, e := LoadSnapshot(*out)
 		if e != nil {
-			return errors.New("existing output is not an observation snapshot")
+			return errors.New("已有输出文件不是采集快照")
 		}
 		previous = &v
 	} else if !os.IsNotExist(e) {
-		return errors.New("snapshot output unavailable")
+		return errors.New("快照输出不可用")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
@@ -220,7 +225,7 @@ func CLI(args []string) error {
 	}
 	current, e := LoadProfile(*profile)
 	if e != nil || profileRevision(current) != profileRevision(p) {
-		return errors.New("observation profile changed during collection")
+		return errors.New("采集配置在采集期间发生变化")
 	}
 	s.ProfileRevision = profileRevision(p)
 	if previous != nil {
@@ -228,14 +233,14 @@ func CLI(args []string) error {
 	}
 	b, e := json.MarshalIndent(s, "", "  ")
 	if e != nil {
-		return errors.New("snapshot encoding failed")
+		return errors.New("快照编码失败")
 	}
 	if len(b) > 4<<20 {
-		return errors.New("redacted snapshot exceeds size limit")
+		return errors.New("脱敏快照超出大小限制")
 	}
 	f, e := os.CreateTemp(filepath.Dir(*out), ".frp-observation-*")
 	if e != nil {
-		return errors.New("snapshot output unavailable")
+		return errors.New("快照输出不可用")
 	}
 	name := f.Name()
 	defer os.Remove(name)
@@ -248,16 +253,16 @@ func CLI(args []string) error {
 	}
 	closeErr := f.Close()
 	if e != nil || closeErr != nil {
-		return errors.New("snapshot write failed")
+		return errors.New("快照写入失败")
 	}
 	if e = os.Rename(name, *out); e != nil {
-		return errors.New("snapshot replacement failed")
+		return errors.New("快照替换失败")
 	}
 	return nil
 }
 func checkDirectory(dir string) error {
 	if managed.TrustedDirectory(dir) != nil {
-		return errors.New("snapshot directory must be protected and root-owned")
+		return errors.New("快照目录必须受保护且归 root 所有")
 	}
 	return nil
 }

@@ -82,6 +82,16 @@ func TestAdoptionWizardUsesRegisteredRuntimeLogsWhenPathsAreEmpty(t *testing.T) 
 		}
 	}
 }
+func TestChineseNumberedAdoptionChoicesPreserveRegisteredTargets(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX adoption inputs tested on Linux")
+	}
+	input := "\n\n\n\n/srv/frp/frps.toml\n1\n\n\n/etc/nginx/conf.d/*.conf\n2\n\n\n\n2\n\n\n\n"
+	r, e := adoptionWizard(bufio.NewReader(strings.NewReader(input)), io.Discard)
+	if e != nil || r.Profile.Runtime.Kind != "systemd" || r.Profile.Nginx == nil || r.Profile.Nginx.Context != "http-fragments" || r.Profile.Nginx.Runtime.Kind != "docker" || r.Profile.Nginx.Runtime.Name != "nginx" || len(r.Profile.Logs) != 3 {
+		t.Fatal("numbered choices changed registration", e)
+	}
+}
 func TestAdoptionUIRequiresSessionEvidenceNotJustHTTP200(t *testing.T) {
 	for _, body := range []string{`{"initialized":false,"authenticated":false}`, `{"ok":true}`} {
 		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

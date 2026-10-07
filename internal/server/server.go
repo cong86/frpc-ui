@@ -77,13 +77,13 @@ func fail(w http.ResponseWriter, e error) {
 }
 func decode(w http.ResponseWriter, r *http.Request, v any) error {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		return errors.New("JSON content type required")
+		return errors.New("请求内容类型必须为 JSON")
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, config.MaxSize+65536)
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
 	if e := d.Decode(v); e != nil {
-		return errors.New("invalid request")
+		return errors.New("请求内容无效")
 	}
 	return nil
 }
@@ -103,7 +103,7 @@ func (s *Server) session(r *http.Request) (session, error) {
 	var expires int64
 	e = s.State.DB.QueryRow("SELECT user,csrf,expires FROM sessions WHERE hash=?", hash(c.Value)).Scan(&user, &csrf, &expires)
 	if e != nil || expires < time.Now().Unix() {
-		return session{}, errors.New("session expired")
+		return session{}, errors.New("会话已过期，请重新登录")
 	}
 	return session{User: user, CSRF: csrf, Token: c.Value}, nil
 }
@@ -129,7 +129,7 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 		if r.Host != s.Host {
-			http.Error(w, "untrusted host", http.StatusForbidden)
+			http.Error(w, "访问主机不可信", http.StatusForbidden)
 			return
 		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -142,12 +142,12 @@ func (s *Server) Handler() http.Handler {
 			if o != "" {
 				u, e := url.Parse(o)
 				if e != nil || u.Host != r.Host || u.Scheme != "http" {
-					http.Error(w, "untrusted origin", http.StatusForbidden)
+					http.Error(w, "请求来源不可信", http.StatusForbidden)
 					return
 				}
 			}
 			if r.Header.Get("X-FRP-Console") != "1" {
-				http.Error(w, "missing request guard", http.StatusForbidden)
+				http.Error(w, "缺少请求防护标识", http.StatusForbidden)
 				return
 			}
 		}
@@ -164,11 +164,11 @@ func (s *Server) Handler() http.Handler {
 		}
 		sess, e := s.session(r)
 		if e != nil {
-			reply(w, 401, map[string]string{"error": "login required"})
+			reply(w, 401, map[string]string{"error": "请先登录"})
 			return
 		}
 		if r.Method != "GET" && r.Header.Get("X-CSRF-Token") != sess.CSRF {
-			reply(w, 403, map[string]string{"error": "invalid CSRF token"})
+			reply(w, 403, map[string]string{"error": "请求校验令牌无效"})
 			return
 		}
 		s.api(w, r, sess)
@@ -177,7 +177,7 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	addr, _, _ := net.SplitHostPort(r.RemoteAddr)
 	if s.limited(addr) {
-		reply(w, 429, map[string]string{"error": "too many attempts; retry after one minute"})
+		reply(w, 429, map[string]string{"error": "尝试次数过多，请一分钟后重试"})
 		return
 	}
 	var in struct {
@@ -189,28 +189,28 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(in.User) < 1 || len(in.User) > 64 || strings.ContainsAny(in.User, "\r\n") {
-		fail(w, errors.New("invalid username"))
+		fail(w, errors.New("用户名无效"))
 		return
 	}
 	if r.URL.Path == "/api/bootstrap" {
 		if in.Password == "" {
-			fail(w, errors.New("password must not be empty"))
+			fail(w, errors.New("密码不能为空"))
 			return
 		}
 		p, e := hashPassword(in.Password)
 		if e != nil {
-			fail(w, errors.New("password hashing failed"))
+			fail(w, errors.New("密码哈希处理失败"))
 			return
 		}
 		// INSERT predicate makes bootstrap one-shot even for simultaneous requests.
 		res, e := s.State.DB.Exec("INSERT INTO users(name,password) SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM users)", in.User, p)
 		if e != nil {
-			fail(w, errors.New("initialization failed"))
+			fail(w, errors.New("初始化失败"))
 			return
 		}
 		n, _ := res.RowsAffected()
 		if n != 1 {
-			reply(w, 409, map[string]string{"error": "administrator already initialized"})
+			reply(w, 409, map[string]string{"error": "管理员已初始化"})
 			return
 		}
 	} else {
@@ -221,14 +221,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		}
 		if checkPassword(p, in.Password) != nil || e != nil {
 			_ = s.State.Audit(in.User, "login", "", "denied")
-			reply(w, 401, map[string]string{"error": "invalid credentials"})
+			reply(w, 401, map[string]string{"error": "用户名或密码不正确"})
 			return
 		}
 	}
 	token, csrf := state.ID(), state.ID()
 	_, e := s.State.DB.Exec("INSERT INTO sessions(hash,user,csrf,expires) VALUES(?,?,?,?)", hash(token), in.User, csrf, time.Now().Add(8*time.Hour).Unix())
 	if e != nil {
-		fail(w, errors.New("session creation failed"))
+		fail(w, errors.New("会话创建失败"))
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: s.cookieName(), Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 28800})
@@ -244,7 +244,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 		}
 		v, e := observe.LoadSnapshot(s.ObservedPath)
 		if e != nil {
-			fail(w, errors.New("read-only snapshot unavailable; collect again on the host"))
+			fail(w, errors.New("只读快照不可读取；请在主机重新采集"))
 			return
 		}
 		reply(w, 200, map[string]any{"configured": true, "snapshot": v})
@@ -261,7 +261,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 		if s.ObservedPath != "" {
 			v, e := observe.LoadSnapshot(s.ObservedPath)
 			if e != nil {
-				fail(w, errors.New("read-only snapshot unavailable; collect again on the host"))
+				fail(w, errors.New("只读快照不可读取；请在主机重新采集"))
 				return
 			}
 			checks := map[string]string{}
@@ -273,13 +273,13 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 		for _, i := range s.Manager.Instances {
 			d, e := s.Manager.Read(i.ID)
 			if e != nil {
-				out = append(out, map[string]any{"instance": i, "error": "configuration unavailable"})
+				out = append(out, map[string]any{"instance": i, "error": "配置不可读取"})
 				continue
 			}
 			snap := d.Snapshot()
 			if !i.Managed {
 				snap.Editable = false
-				snap.Reason = "Imported deployment is read-only in this milestone."
+				snap.Reason = "当前阶段导入的部署仅支持只读查看。"
 			}
 			ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 			o := s.Runtime.Observe(ctx, i.ID, d, false)
@@ -308,7 +308,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/instances/"), "/verify")
 		d, e := s.Manager.Read(id)
 		if e != nil {
-			fail(w, errors.New("instance unavailable"))
+			fail(w, errors.New("实例不可读取"))
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
@@ -322,7 +322,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 		s.mu.Lock()
 		s.observations[id] = o
 		s.mu.Unlock()
-		_ = s.State.Audit(sess.User, "verify", id, "observed; business success requires explicit protocol checks")
+		_ = s.State.Audit(sess.User, "verify", id, "已采集状态；业务成功需要明确的协议检查")
 		reply(w, 200, o)
 		return
 	}
@@ -395,7 +395,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 	if path == "/api/operations" && r.Method == "GET" {
 		rows, e := s.State.DB.Query("SELECT id,instance,state,created,result,CASE WHEN backup IS NULL THEN 0 ELSE 1 END FROM plans ORDER BY created DESC,rowid DESC LIMIT 100")
 		if e != nil {
-			fail(w, errors.New("journal unavailable"))
+			fail(w, errors.New("操作记录不可读取"))
 			return
 		}
 		defer rows.Close()
@@ -405,7 +405,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 			var created int64
 			var backup int
 			if e = rows.Scan(&id, &inst, &status, &created, &result, &backup); e != nil {
-				fail(w, errors.New("journal unavailable"))
+				fail(w, errors.New("操作记录不可读取"))
 				return
 			}
 			out = append(out, map[string]any{"id": id, "instance": inst, "state": status, "created": created, "result": result, "hasBackup": backup == 1})
@@ -416,7 +416,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 	if path == "/api/audit" && r.Method == "GET" {
 		rows, e := s.State.DB.Query("SELECT at,actor,action,instance,result FROM audit ORDER BY id DESC LIMIT 100")
 		if e != nil {
-			fail(w, errors.New("audit unavailable"))
+			fail(w, errors.New("审计记录不可读取"))
 			return
 		}
 		defer rows.Close()
@@ -425,7 +425,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 			var at int64
 			var actor, action, inst, result string
 			if e = rows.Scan(&at, &actor, &action, &inst, &result); e != nil {
-				fail(w, errors.New("audit unavailable"))
+				fail(w, errors.New("审计记录不可读取"))
 				return
 			}
 			out = append(out, map[string]any{"at": at, "actor": actor, "action": action, "instance": inst, "result": result})
