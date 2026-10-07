@@ -10,6 +10,39 @@ Profile、快照及其所有父目录须 root 拥有，不能被组或其他用�
 
 原配置不变，快照的配置文本从脱敏字段重建，不包含原始注释。已有部署始终只读；计划/代理修改与恢复接口不会获得其写权限。
 
+## 一键安装管理服务（preview.6 起）
+
+Debian/Ubuntu、运行中的 systemd，root 终端执行：
+
+```sh
+curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | bash
+```
+
+选择 **2：已有 FRPS + Nginx 只读管理**；也可直接 `| bash -s -- --mode adopt`。此模式仅下载 Console 与摘要，不下载官方 FRP，原服务使用 systemd 或 Docker 均可登记。
+
+向导填写新的管理服务名称/目录、UI 回环地址、10～60 秒采集间隔、原 FRPS TOML 的宿主机路径及运行目标。Nginx 可选登记完整主配置或 HTTP 站点片段、允许读取的宿主机根目录、运行前缀与内部路径映射、运行目标和日志文件。原生日常部署一般使用 `/etc/nginx/nginx.conf`、前缀 `/etc/nginx` 和相同路径映射；Docker 须按真实挂载填写。这些只是示例，不自动发现或猜测实际路径。
+
+日志文件留空时使用已登记 systemd/Docker 的有限日志；runtime 选择 unknown 则不推断进程状态，也不自动登记运行日志。Nginx 自定义 log_format 或不输出到登记来源时可能没有可解析的访问摘要，需要填写真实日志文件。复杂多挂载可使用下面的私有 Profile 和非交互计划接口。
+
+预检执行一次只读采集，将 API、日志缺失及不完整 Nginx 配置写入计划警告。完整计划 ID 确认后创建独立低权限用户、Console 服务、root 只读采集 oneshot 和 timer，验证受限采集单元、timer、UI `/api/session`。首次网页访问设置管理员。UI 默认回环监听，远程通过 SSH 隧道访问。
+
+默认新增 `/opt/frp-console-observer/`、`frp-console-observer.service`、`frp-console-observer-collect.service` 与 `frp-console-observer-collect.timer`。程序不改变原服务、配置或权限，不开启原 FRPS 管理 API。发现目标目录、用户、单元或安装历史冲突时拒绝覆盖；成功的原计划重复执行返回原记录，不重启 UI。安装中失败只停止/移除本次新增管理单元，保留新目录、数据和用户供检查，记录在 `/var/lib/frp-console-installer/<name>/adoption.json`；不自动重放失败。
+
+仅检查 Console 下载：
+
+```sh
+curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | bash -s -- --mode adopt --verify-only
+```
+
+高级自动化请求含 `name`、`root`、`listen`、`intervalSeconds` 与下述 `profile` 对象，保存为 root 私有 JSON：
+
+```sh
+./frp-console install adopt-plan --request /root/adoption-request.json --out /root/adoption-plan.json
+./frp-console install adopt-apply --plan /root/adoption-plan.json --confirm FULL_PLAN_ID
+```
+
+确认绑定原 FRPS 修订、Console 二进制、登记路径、目标目录、timer 和 15 分钟有效期。原配置在预览后变化会被拒绝；UI 安装成功不代表原 FRPS 认证、代理注册或业务访问成功。见 [统一入口验证](unified-install-validation.md)。
+
 ## Profile 示例
 
 以下地址和路径是占位示例，应先只读核对实际部署后填写，不代表现有云端设置：
@@ -55,7 +88,7 @@ frp-console --data /path/to/private-console-data \
 
 采集器序列化同一输出的并发采集，原子替换自己的快照；不会覆盖原配置、Profile 或任意已有文件。首次网页访问初始化独立管理员。现有 API 的 Host/Origin/CSRF 防护和回环限制保持有效，远程访问仍使用 SSH 隧道。
 
-可以由管理员安排一个独立 timer 定期执行上述采集命令（建议 15～30 秒），浏览器每 30 秒读新快照；本程序不会自动安装 timer。快照超过 120 秒时，运行健康层级降为未验证，速率失效，配置和日志按历史快照展示。过期后需重新采集，不以刷新网页冒充重新探测。
+一键接入自动安装独立 timer；手动运行上述命令时也可自行安排定时采集（建议 15～30 秒）。浏览器每 30 秒读新快照。快照超过 120 秒时，运行健康层级降为未验证，速率失效，配置和日志按历史快照展示。过期后需重新采集，不以刷新网页冒充重新探测。
 
 ## 页面内容与证据边界
 
@@ -66,6 +99,4 @@ frp-console --data /path/to/private-console-data \
 - FRP 关联只根据回环上游端口匹配 HTTP vhost/管理端口，显示候选提示；不证明请求真的经过该代理，也不展开动态变量、Lua、stream 或复杂继承的运行语义。
 - 日志：结构化服务事件和默认 common/combined 格式 Nginx 访问摘要，不返回原始行、URL/查询参数、请求头、IP、用户名或任意错误文本；自定义 log_format 未识别行单独计数。每文件最多读尾部 128 KiB、每来源最多 100 行。窗口响应体字节合计不代表全量 Nginx 流量或速率。
 
-完整写接管、配置应用、日志原文导出、实时连接推送及反代加载仍为后续能力。preview.5 发布程序包含本功能；旧 preview.4 程序不会自动升级。
-
-程序从 GitHub 或 Gitee 的 preview.5 Release 下载对应 `frp-console_v0.1.0-preview.5_linux_amd64.tar.gz` / `arm64` 归档和 `SHA256SUMS`，校验后解包取得 `frp-console`。只读接入不需要下载或安装新的官方 FRP。按本文单独登记 Profile 与快照，不重新运行面向新部署的 `install wizard`；一键入口仍仅执行新安装，不自动发现或接管生产实例。
+完整写接管、配置应用、日志原文导出、实时连接推送及反代加载仍为后续能力。preview.5 提供手动采集与 UI，preview.6 增加一键安装管理服务；旧 Console 不会自动升级。不要对已有实例选择新安装模式。

@@ -1,19 +1,13 @@
-FRP Console v0.1.0-preview.5：systemd 新安装与已有 FRPS/Nginx 只读观测预览版，第一版尚未完成。提供 Linux amd64/arm64 程序，前端已嵌入。
+FRP Console v0.1.0-preview.6：统一一键新安装与已有 FRPS/Nginx 只读管理安装入口。第一版尚未完成，提供嵌入前端的 Linux amd64/arm64 程序。
 
-新增 `observe` 管理员采集 CLI 和 `--observed-snapshot` 模式：显示已有 FRPS 的脱敏配置、进程、认证、代理与客户端、累计流量和采集间隔平均速率；读取 Nginx HTTP 站点/include/upstream、HTTPS/WebSocket 配置，以及有限日志摘要。低权限网页只读脱敏快照，不持有 Docker socket、不重装 FRP、不写源配置、不重载服务。快照超过 120 秒时撤销健康和速率结论。
+`curl | bash` 先选择新安装或只读接入，也可传 `--mode new` / `--mode adopt`。新安装继续支持原生 FRPC/FRPS/两者，原版官方 FRP 校验、配置预览和明确确认。已有部署模式仅下载 Console，向导登记原 FRPS TOML、systemd/Docker 目标、Nginx 配置路径/挂载/日志，自动安装独立低权限 UI 和 root 只读采集 timer；不重装 FRP，不修改原配置或权限，不重载或重启原服务。
 
-已有部署接入按仓库 `docs/existing-frps.md` 单独配置，不重新运行新安装向导。旧安装不会自动升级；当前没有自动升级功能。只读接入无需下载新的官方 FRP。
+预检显示 API/日志不可用与配置读取范围警告，执行前重新核对原配置修订。验证新增受限采集服务、timer 与 UI session 接口；同一成功计划重试不重启 UI。安装失败只清理本次新增管理单元，保留新数据和用户供检查。管理员由首次网页访问设置，UI 回环监听、远程使用 SSH 隧道。安装成功与原 FRPS 认证、代理注册、业务访问分层显示。
 
-验证：Go 测试、go vet、前端类型检查/构建通过，12 项采集测试在 Windows/Linux amd64 通过，amd64/arm64 构建通过。真实 FRPS/FRPC 隔离隧道验证了低权限登录、脱敏、写入拒绝、源配置/PID 不变、快照过期，以及 Console 退出后隧道持续可用。Docker 目前仅模拟固定命令测试，Nginx 为磁盘 fixture 解析，未验收真实 worker、生产权限或图形交互。
+只读页面包含脱敏 FRPS 配置、进程、代理/客户端、累计流量和采集间隔平均速率，Nginx HTTP 站点/include/upstream、HTTPS/WebSocket 配置及有限日志摘要。网页只读脱敏快照，不持有 Docker socket；快照过期撤销健康和速率结论。
 
-下载入口检测系统及架构，从本 Release 下载对应归档和 SHA256SUMS，校验后启动交互向导。向导预览和确认后创建独立 FRPC/FRPS 与 Console 服务。UI 回环监听，管理员由首次网页访问初始化。
+验证：Go 测试与 go vet、16 项入口测试、11 项 Gitee 同步测试、两架构构建；Linux amd64 隔离环境实际官方 FRPS/FRPC 隧道和 systemd 管理服务验证。真实终端管道经过完整接入向导、确认、安装和 timer 刷新；原服务 PID、配置哈希和测试隧道保持正常，模拟新增服务启动失败时只移除新增单元。Docker 为固定命令模拟测试，Nginx 为磁盘 fixture 解析，arm64 仅构建，不代表实机或生产验收。详见 docs/unified-install-validation.md。
 
-支持短密码和长密码，兼容已有管理员。Console 退出不影响 FRP 隧道。
+默认 Console 国内下载使用 Gitee；新安装的官方 FRP 从官方 GitHub 下载或传 `--frp-archive` 原版本地缓存，仍强制校验。Gitee 不接受官方 FRP 附件，完整国内在线镜像尚未实现。只读接入不需要官方 FRP 下载。源码/标签采用 Gitee 原生 Pull 镜像，发布附件独立同步。
 
-preview.2 修复私有 umask 下安装目录和程序权限被收紧的问题，确保独立低权限服务能够启动；原始配置和计划仍保持私有。
-
-preview.3 增加国内源和官方 FRP 缓存。实际发布验证发现 Gitee 拒绝官方 FRP 归档；preview.3 原版安装入口不适用于 Gitee。
-
-preview.4 修正国内源兼容：Gitee 镜像源码、标签、Console 两架构归档和元数据，保留 GitHub 原始完整 SHA256SUMS；官方 FRP 归档只在 GitHub 发布。选 Gitee 时 FRP 从官方 GitHub 获取，也可用 `--frp-archive` 指定原版本地归档，仍强制校验。完整国内在线镜像尚未实现。源码自动同步采用用户配置的 Gitee Pull 镜像；附件由 GitHub Sync Gitee 在 Preview release 成功后单独镜像，使用 GITEE_TOKEN，不推送源码。仍提供手动补同步入口。
-
-仍未开放生产接管、配置运行应用/自动回滚、Compose 自动安装、Nginx 加载或升级/卸载。arm64 构建不代表 arm64 实机验收。
+现有 Console 不会自动升级。完整写接管、配置运行应用/自动回滚、Compose 自动安装、Nginx 校验/加载和升级/卸载尚未开放。旧 preview.5 提供手动只读接入，使用本次入口需下载 preview.6。
