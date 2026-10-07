@@ -13,7 +13,7 @@ import time
 import unittest
 
 SCRIPT = Path(__file__).with_name('install.sh').resolve()
-VERSION = 'v0.1.0-preview.7'
+VERSION = 'v0.1.0-preview.8'
 
 
 class BootstrapTests(unittest.TestCase):
@@ -68,7 +68,7 @@ class BootstrapTests(unittest.TestCase):
         (self.root/f'frp-console_{VERSION}_linux_amd64.tar.gz').write_bytes(b'tampered')
         r = self.run_script('--verify-only')
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn(b'Checksum mismatch', r.stderr)
+        self.assertIn('摘要不匹配'.encode(), r.stderr)
         self.assertFalse(self.marker.exists())
 
     def test_unexpected_archive_member_rejected(self):
@@ -76,13 +76,13 @@ class BootstrapTests(unittest.TestCase):
         self.checksums()
         r = self.run_script('--verify-only')
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn(b'Unexpected archive members', r.stderr)
+        self.assertIn('归档包含不符合预期的文件'.encode(), r.stderr)
 
     def test_missing_checksum_rejected(self):
         (self.root/'SHA256SUMS').write_text('')
         r = self.run_script('--verify-only')
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn(b'checksum missing', r.stderr)
+        self.assertIn('发布清单缺少所需摘要'.encode(), r.stderr)
 
     def test_unsupported_architecture_rejected(self):
         self.env['TEST_ARCH'] = 'mips'
@@ -105,13 +105,13 @@ class BootstrapTests(unittest.TestCase):
         result=self.run_script('--mode','adopt','--verify-only')
         self.assertEqual(result.returncode,0,result.stderr.decode())
         self.assertFalse(self.marker.exists())
-        self.assertIn(b'no FRP downloaded',result.stdout)
+        self.assertIn('未下载官方 FRP'.encode(),result.stdout)
 
     def test_corrupt_frp_archive_never_executes(self):
         (self.root/'frp_0.71.0_linux_amd64.tar.gz').write_bytes(b'tampered')
         r = self.run_script('--verify-only')
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn(b'Checksum mismatch', r.stderr)
+        self.assertIn('摘要不匹配'.encode(), r.stderr)
         self.assertFalse(self.marker.exists())
 
     def test_local_frp_archive_avoids_github_and_checks_digest(self):
@@ -122,7 +122,7 @@ class BootstrapTests(unittest.TestCase):
         archive.write_bytes(b'tampered-local-cache')
         result=self.run_script('--verify-only','--frp-archive',str(archive))
         self.assertNotEqual(result.returncode,0)
-        self.assertIn(b'Checksum mismatch',result.stderr)
+        self.assertIn('摘要不匹配'.encode(),result.stderr)
         self.assertFalse(self.marker.exists())
 
     def test_local_frp_symlink_rejected(self):
@@ -130,12 +130,12 @@ class BootstrapTests(unittest.TestCase):
         linked.symlink_to(self.root/'frp_0.71.0_linux_amd64.tar.gz')
         result=self.run_script('--verify-only','--frp-archive',str(linked))
         self.assertNotEqual(result.returncode,0)
-        self.assertIn(b'regular local file',result.stderr)
+        self.assertIn('普通本地文件'.encode(),result.stderr)
 
     def test_no_terminal_fails_before_install(self):
         r = self.run_script()
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn(b'An interactive terminal is required', r.stderr)
+        self.assertIn('需要交互终端'.encode(), r.stderr)
         self.assertFalse(self.marker.exists())
 
     def test_curl_pipe_keeps_terminal_for_wizard(self):
@@ -162,7 +162,7 @@ class BootstrapTests(unittest.TestCase):
                     if not data:
                         break
                     transcript += data
-                    if not selected and b'Select [1]:' in transcript:
+                    if not selected and '请选择 [1]：'.encode() in transcript:
                         os.write(fd,(mode+'\n').encode())
                         selected=True
             done, status = os.waitpid(pid, os.WNOHANG)

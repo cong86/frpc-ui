@@ -77,7 +77,7 @@ func ReadJSON(path string, v any) error {
 		return e
 	}
 	if !st.Mode().IsRegular() || st.Mode().Perm()&0077 != 0 || st.Size() > config.MaxSize {
-		return errors.New("private request/plan must be a regular file, mode 0600, below 1 MiB")
+		return errors.New("私有请求或计划必须是小于 1 MiB、权限为 0600 的普通文件")
 	}
 	f, e := os.Open(path)
 	if e != nil {
@@ -87,24 +87,24 @@ func ReadJSON(path string, v any) error {
 	d := json.NewDecoder(f)
 	d.DisallowUnknownFields()
 	if e = d.Decode(v); e != nil {
-		return errors.New("invalid private request or plan JSON")
+		return errors.New("私有请求或计划 JSON 无效")
 	}
 	var extra any
 	if d.Decode(&extra) != io.EOF {
-		return errors.New("trailing JSON in private request or plan")
+		return errors.New("私有请求或计划包含尾随 JSON 数据")
 	}
 	return nil
 }
 func checkRequest(r Request) error {
 	if !nameRE.MatchString(r.Name) || !strings.HasPrefix(r.Name, "frp-console") || !filepath.IsAbs(r.Root) || filepath.Clean(r.Root) != r.Root || r.Root == "/" || strings.ContainsAny(r.Root, " \t\r\n\"'\\%$") {
-		return errors.New("use a safe absolute dedicated root path and installation name")
+		return errors.New("请使用安全的绝对路径、独立目录及安装名称")
 	}
 	host, _, e := net.SplitHostPort(r.Listen)
 	if e != nil || net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback() {
-		return errors.New("Console listen must be a literal loopback address")
+		return errors.New("管理页面必须监听明确的回环 IP 地址")
 	}
 	if len(r.Configs) == 0 || len(r.Configs) > 2 {
-		return errors.New("provide frpc, frps, or both configurations")
+		return errors.New("请提供客户端、服务端或两端配置")
 	}
 	for role, raw := range r.Configs {
 		d, e := config.Parse(raw, role)
@@ -117,15 +117,15 @@ func checkRequest(r Request) error {
 		auth, _ := d.Values["auth"].(map[string]any)
 		token, _ := auth["token"].(string)
 		if auth["method"] != "token" || len(token) < 12 || strings.Contains(token, "__SET_") || strings.Contains(token, "DEMO_ONLY") {
-			return errors.New("new installation requires an explicitly supplied token of at least 12 bytes")
+			return errors.New("新安装必须明确提供至少 12 字节的认证令牌")
 		}
 	}
 	if len(r.Probes) > 16 {
-		return errors.New("at most 16 explicit probes")
+		return errors.New("最多登记 16 项明确的探针")
 	}
 	for _, p := range r.Probes {
 		if _, ok := r.Configs[p.Instance]; !ok {
-			return errors.New("probe must belong to an installed instance")
+			return errors.New("探针必须属于本次安装的实例")
 		}
 		if e = managed.ValidateProbe(p); e != nil {
 			return e
@@ -135,17 +135,17 @@ func checkRequest(r Request) error {
 }
 func preflight(r Request) error {
 	if runtime.GOOS != "linux" || Checksums[runtime.GOARCH] == "" {
-		return errors.New("systemd installation supports Linux amd64/arm64")
+		return errors.New("systemd 安装支持 Linux amd64/arm64")
 	}
 	raw, e := os.ReadFile("/etc/os-release")
 	if e != nil || (!strings.Contains(string(raw), "ID=debian") && !strings.Contains(string(raw), "ID=ubuntu")) {
-		return errors.New("this installer supports Debian and Ubuntu")
+		return errors.New("此安装器支持 Debian 和 Ubuntu")
 	}
 	if _, e = os.Stat("/run/systemd/system"); e != nil {
-		return errors.New("running systemd required; LXC namespace setup is a host-side prerequisite")
+		return errors.New("需要正在运行的 systemd；LXC 命名空间须在宿主机先准备好")
 	}
 	if _, e = exec.LookPath("systemctl"); e != nil {
-		return errors.New("systemctl unavailable")
+		return errors.New("systemctl 命令不可用")
 	}
 	if e = checkRequest(r); e != nil {
 		return e
@@ -153,17 +153,17 @@ func preflight(r Request) error {
 	// Existing files/services/users are never silently taken over.
 	for _, p := range append([]string{r.Root}, unitPaths(r)...) {
 		if _, e = os.Lstat(p); !os.IsNotExist(e) {
-			return errors.New("installation target already exists; only fresh installation is supported")
+			return errors.New("安装目标已存在；此模式仅支持新安装")
 		}
 	}
 	for _, p := range unitPaths(r) {
 		b, e := exec.Command("systemctl", "show", filepath.Base(p), "--property=LoadState", "--value").Output()
 		if e != nil || strings.TrimSpace(string(b)) != "not-found" {
-			return errors.New("a planned systemd unit is already registered")
+			return errors.New("计划中的 systemd 单元已登记")
 		}
 	}
 	if exec.Command("id", "-u", r.Name).Run() == nil {
-		return errors.New("installation user already exists")
+		return errors.New("安装用户已存在")
 	}
 	for _, p := range listenAddresses(r) {
 		network := "tcp"
@@ -174,13 +174,13 @@ func preflight(r Request) error {
 		if network == "tcp" {
 			l, e := net.Listen("tcp", p)
 			if e != nil {
-				return errors.New("a planned listen port is unavailable")
+				return errors.New("计划中的监听端口不可用")
 			}
 			l.Close()
 		} else {
 			l, e := net.ListenPacket("udp", p)
 			if e != nil {
-				return errors.New("a planned UDP port is unavailable")
+				return errors.New("计划中的 UDP 端口不可用")
 			}
 			l.Close()
 		}
@@ -247,10 +247,10 @@ func roles(r Request) []string {
 	return a
 }
 func frpUnit(r Request, role string) string {
-	return fmt.Sprintf("[Unit]\nDescription=Independent official %s\nAfter=network-online.target\n\n[Service]\nUser=%s\nGroup=%s\nExecStart=%s/frp/%s -c %s/data/instances/%s/%s.toml\nRestart=on-failure\nRestartSec=2\nNoNewPrivileges=true\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n", role, r.Name, r.Name, r.Root, role, r.Root, role, role)
+	return fmt.Sprintf("[Unit]\nDescription=独立官方 %s 服务\nAfter=network-online.target\n\n[Service]\nUser=%s\nGroup=%s\nExecStart=%s/frp/%s -c %s/data/instances/%s/%s.toml\nRestart=on-failure\nRestartSec=2\nNoNewPrivileges=true\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n", role, r.Name, r.Name, r.Root, role, r.Root, role, role)
 }
 func consoleUnit(r Request) string {
-	return fmt.Sprintf("[Unit]\nDescription=FRP Console\nAfter=network-online.target\n\n[Service]\nUser=%s\nGroup=%s\nExecStart=%s/bin/frp-console --data %s/data --manifest %s/manifest.json --listen %s\nRestart=on-failure\nRestartSec=2\nNoNewPrivileges=true\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n", r.Name, r.Name, r.Root, r.Root, r.Root, r.Listen)
+	return fmt.Sprintf("[Unit]\nDescription=FRP 控制台\nAfter=network-online.target\n\n[Service]\nUser=%s\nGroup=%s\nExecStart=%s/bin/frp-console --data %s/data --manifest %s/manifest.json --listen %s\nRestart=on-failure\nRestartSec=2\nNoNewPrivileges=true\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n", r.Name, r.Name, r.Root, r.Root, r.Root, r.Listen)
 }
 func NewPlan(ctx context.Context, r Request, console string) (Plan, error) {
 	if e := preflight(r); e != nil {
@@ -291,7 +291,7 @@ func planID(p Plan) string {
 func prepare(ctx context.Context, archive, arch, dir string) error {
 	expected, ok := Checksums[arch]
 	if !ok {
-		return errors.New("unsupported architecture")
+		return errors.New("不支持此架构")
 	}
 	if archive == "" {
 		archive = filepath.Join(dir, "download.tar.gz")
@@ -302,11 +302,11 @@ func prepare(ctx context.Context, archive, arch, dir string) error {
 		client := &http.Client{Timeout: 90 * time.Second}
 		resp, e := client.Do(req)
 		if e != nil {
-			return errors.New("official FRP download failed")
+			return errors.New("官方 FRP 下载失败")
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
-			return errors.New("official FRP download rejected")
+			return errors.New("官方 FRP 下载被拒绝")
 		}
 		f, e := os.OpenFile(archive, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if e != nil {
@@ -328,11 +328,11 @@ func prepare(ctx context.Context, archive, arch, dir string) error {
 	compressed, e := io.ReadAll(io.LimitReader(f, (100<<20)+1))
 	f.Close()
 	if e != nil || len(compressed) > 100<<20 {
-		return errors.New("archive unavailable or too large")
+		return errors.New("归档不可读取或超出大小限制")
 	}
 	sum := sha256.Sum256(compressed)
 	if hex.EncodeToString(sum[:]) != expected {
-		return errors.New("official FRP archive SHA-256 does not match pinned release")
+		return errors.New("官方 FRP 归档 SHA-256 与固定版本摘要不匹配")
 	}
 	gz, e := gzip.NewReader(bytes.NewReader(compressed))
 	if e != nil {
@@ -355,7 +355,7 @@ func prepare(ctx context.Context, archive, arch, dir string) error {
 			continue
 		}
 		if h.Typeflag != tar.TypeReg || h.Size > 80<<20 || seen[role] {
-			return errors.New("invalid official binary archive entry")
+			return errors.New("官方程序归档条目无效")
 		}
 		seen[role] = true
 		dest, e := os.OpenFile(filepath.Join(dir, role), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0755)
@@ -372,13 +372,13 @@ func prepare(ctx context.Context, archive, arch, dir string) error {
 		}
 	}
 	if !seen["frpc"] || !seen["frps"] {
-		return errors.New("official archive lacks required binaries")
+		return errors.New("官方归档缺少必要的程序文件")
 	}
 	return nil
 }
 func fixedCommand(ctx context.Context, name string, args ...string) error {
 	if exec.CommandContext(ctx, name, args...).Run() != nil {
-		return fmt.Errorf("%s step failed; raw diagnostic suppressed", name)
+		return fmt.Errorf("%s 步骤失败；原始诊断信息已隐藏", name)
 	}
 	return nil
 }
@@ -418,7 +418,7 @@ func deploymentParents(path string) error {
 		info, err := os.Stat(current)
 		if err == nil {
 			if !info.IsDir() {
-				return errors.New("deployment parent is not a directory")
+				return errors.New("部署父路径不是目录")
 			}
 			break
 		}
@@ -439,10 +439,10 @@ func deploymentParents(path string) error {
 }
 func Apply(ctx context.Context, p Plan, confirmation, console string) (Journal, error) {
 	if os.Geteuid() != 0 || runtime.GOOS != "linux" {
-		return Journal{}, errors.New("apply requires Linux root")
+		return Journal{}, errors.New("执行安装需要 Linux root 权限")
 	}
 	if p.ID == "" || confirmation != p.ID || p.ID != planID(p) || p.Arch != runtime.GOARCH {
-		return Journal{}, errors.New("plan confirmation or integrity mismatch")
+		return Journal{}, errors.New("计划确认标识或完整性不匹配")
 	}
 	if e := checkRequest(p.Request); e != nil {
 		return Journal{}, e
@@ -456,19 +456,19 @@ func Apply(ctx context.Context, p Plan, confirmation, console string) (Journal, 
 	if b, e := os.ReadFile(journalPath); e == nil {
 		var prior Journal
 		if json.Unmarshal(b, &prior) != nil || prior.ID != p.ID {
-			return Journal{}, errors.New("installation journal exists; inspect before another install")
+			return Journal{}, errors.New("安装记录已存在；再次安装前请先检查")
 		}
 		if prior.State == "installed" {
 			return prior, nil
 		}
-		return prior, errors.New("prior installation incomplete; inspect journal and retained files, no automatic retry")
+		return prior, errors.New("上次安装未完成；请检查记录及保留文件，不会自动重试")
 	}
 	if time.Now().Unix()-p.Created > 900 || p.Created > time.Now().Unix() {
-		return Journal{}, errors.New("installation plan expired")
+		return Journal{}, errors.New("安装计划已过期")
 	}
 	hash, e := managed.Digest(console)
 	if e != nil || hash != p.ConsoleHash {
-		return Journal{}, errors.New("Console binary changed since preview")
+		return Journal{}, errors.New("管理程序在预览后发生变化")
 	}
 	if e = preflight(p.Request); e != nil {
 		return Journal{}, e
@@ -489,7 +489,7 @@ func Apply(ctx context.Context, p Plan, confirmation, console string) (Journal, 
 	if e = os.MkdirAll(filepath.Dir(journalPath), 0700); e != nil {
 		return Journal{}, e
 	}
-	journal := Journal{ID: p.ID, State: "installing", At: time.Now().Unix(), Note: "Fresh installation; data retained on failure"}
+	journal := Journal{ID: p.ID, State: "installing", At: time.Now().Unix(), Note: "新安装；失败时保留数据"}
 	if e = WriteJSON(journalPath, journal); e != nil {
 		return Journal{}, e
 	}
@@ -516,7 +516,7 @@ func Apply(ctx context.Context, p Plan, confirmation, console string) (Journal, 
 			_ = fixedCommand(cleanupCtx, "systemctl", "daemon-reload")
 			cancel()
 			journal.State = "failed_retained"
-			journal.Note = "New service units removed; configuration and data retained for inspection"
+			journal.Note = "已移除新增服务单元；配置和数据保留供检查"
 			_ = save()
 		}
 	}()
@@ -529,7 +529,7 @@ func Apply(ctx context.Context, p Plan, confirmation, console string) (Journal, 
 	}
 	sum := sha256.Sum256(executable)
 	if hex.EncodeToString(sum[:]) != p.ConsoleHash {
-		return journal, errors.New("Console changed before binary copy")
+		return journal, errors.New("管理程序在复制二进制前发生变化")
 	}
 	if e = put(filepath.Join(r.Root, "bin", "frp-console"), executable, 0755); e != nil {
 		return journal, e
@@ -555,7 +555,7 @@ func Apply(ctx context.Context, p Plan, confirmation, console string) (Journal, 
 		if p.CAFile != "" {
 			cert, e := os.ReadFile(p.CAFile)
 			if e != nil {
-				return journal, errors.New("probe CA unavailable")
+				return journal, errors.New("探针 CA 证书不可读取")
 			}
 			target := filepath.Join(r.Root, "pki", fmt.Sprintf("probe-%d.crt", index))
 			if e = put(target, cert, 0644); e != nil {
@@ -598,7 +598,7 @@ func Apply(ctx context.Context, p Plan, confirmation, console string) (Journal, 
 		}
 	}
 	journal.State = "installed"
-	journal.Note = "Independent services active; authentication and business still require verification"
+	journal.Note = "独立服务已启动；认证和业务仍需单独验证"
 	if e = save(); e != nil {
 		return journal, e
 	}

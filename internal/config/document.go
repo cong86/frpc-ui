@@ -16,7 +16,7 @@ import (
 
 const MaxSize = 1 << 20
 
-var ErrConflict = errors.New("configuration changed; refresh and create a new plan")
+var ErrConflict = errors.New("配置已被修改；请刷新并重新生成计划")
 var keyLine = regexp.MustCompile(`^([ \t]*[A-Za-z0-9_."'-]+[ \t]*=[ \t]*)(.*)$`)
 var header = regexp.MustCompile(`^[ \t]*\[\[proxies\]\][ \t]*(?:#.*)?$`)
 var sensitive = regexp.MustCompile(`(?i)(token|password|passwd|secret|authorization|proxyurl|groupkey|privatekey)`)
@@ -50,36 +50,36 @@ func (d *Document) RedactText(text string) string {
 }
 func Parse(raw, role string) (*Document, error) {
 	if len(raw) > MaxSize {
-		return nil, errors.New("configuration exceeds 1 MiB")
+		return nil, errors.New("配置超出 1 MiB 大小限制")
 	}
 	if strings.ContainsRune(raw, 0) {
-		return nil, errors.New("NUL is not allowed")
+		return nil, errors.New("配置不能包含空字符")
 	}
 	v := map[string]any{}
 	if err := toml.Unmarshal([]byte(raw), &v); err != nil {
-		return nil, errors.New("invalid TOML; check syntax without exposing credentials")
+		return nil, errors.New("TOML 配置无效；请检查语法，避免暴露凭据")
 	}
 	if role != "frpc" && role != "frps" {
-		return nil, errors.New("invalid instance role")
+		return nil, errors.New("实例角色无效")
 	}
 	if p, ok := v["proxies"]; ok {
 		if role != "frpc" {
-			return nil, errors.New("server configuration cannot own client proxies")
+			return nil, errors.New("服务端配置不能包含客户端代理定义")
 		}
 		rows, ok := p.([]any)
 		if !ok {
-			return nil, errors.New("proxies must be array tables")
+			return nil, errors.New("代理定义必须是数组表格")
 		}
 		seen := map[string]bool{}
 		for _, row := range rows {
 			m, ok := row.(map[string]any)
 			if !ok {
-				return nil, errors.New("invalid proxy")
+				return nil, errors.New("代理定义无效")
 			}
 			n, _ := m["name"].(string)
 			t, _ := m["type"].(string)
 			if n == "" || seen[n] {
-				return nil, errors.New("proxy names must be nonempty and unique")
+				return nil, errors.New("代理名称不能为空或重复")
 			}
 			seen[n] = true
 			switch t {
@@ -92,22 +92,22 @@ func Parse(raw, role string) (*Document, error) {
 }
 func (d *Document) Editability() string {
 	if strings.Contains(d.Raw, `"""`) || strings.Contains(d.Raw, `'''`) {
-		return "multiline strings require read-only access in this milestone"
+		return "当前阶段多行字符串仅支持只读查看"
 	}
 	if strings.Contains(d.Raw, "{{") {
-		return "environment templates require dependency-aware editing"
+		return "环境模板需要结合依赖关系编辑，当前仅支持只读查看"
 	}
 	if _, ok := d.Values["includes"]; ok {
-		return "included configuration requires multi-file transactions"
+		return "包含外部配置的部署需要多文件事务，当前仅支持只读查看"
 	}
 	if _, ok := d.Values["start"]; ok {
-		return "existing start filters require a version-aware migration"
+		return "已有 start 过滤配置需要按版本迁移，当前仅支持只读查看"
 	}
 	masked, _ := d.masked()
 	for _, secret := range secrets(d.Values) {
 		quoted := strconv.Quote(secret)
 		if secret != "" && (strings.Contains(masked, secret) || strings.Contains(masked, quoted[1:len(quoted)-1])) {
-			return "credential literals outside simple assignments require read-only access"
+			return "存在简单赋值之外的凭据写法，当前仅支持只读查看"
 		}
 	}
 	return ""
@@ -246,7 +246,7 @@ func (d *Document) Snapshot() Snapshot {
 		if err == nil {
 			text = string(b)
 		} else {
-			text = "# preview unavailable"
+			text = "# 预览暂不可用"
 		}
 	}
 	return Snapshot{Revision: Revision(d.Raw), Text: text, Values: values, Editable: reason == "", Reason: reason}
@@ -261,23 +261,23 @@ func (d *Document) RestoreMasks(candidate string) (string, error) {
 		for _, tag := range marker.FindAllString(line, -1) {
 			match := keyLine.FindStringSubmatch(line)
 			if match == nil || !sensitive.MatchString(strings.SplitN(match[1], "=", 2)[0]) || strings.TrimSpace(match[2]) != `"`+tag+`"` {
-				return "", errors.New("credential placeholders must remain standalone sensitive field values")
+				return "", errors.New("凭据占位符必须独立作为敏感字段的值")
 			}
 			counts[tag]++
 			if counts[tag] > 1 {
-				return "", errors.New("credential placeholders cannot be duplicated")
+				return "", errors.New("凭据占位符不能重复")
 			}
 		}
 	}
 	for _, tag := range marker.FindAllString(candidate, -1) {
 		if _, ok := masks[tag]; !ok {
-			return "", errors.New("unknown credential placeholder")
+			return "", errors.New("未知凭据占位符")
 		}
 	}
 	for tag, value := range masks {
 		quoted := `"` + tag + `"`
 		if strings.Contains(candidate, tag) && !strings.Contains(candidate, quoted) {
-			return "", errors.New("credential placeholders cannot be embedded in other values")
+			return "", errors.New("凭据占位符不能嵌入其他值")
 		}
 		candidate = strings.ReplaceAll(candidate, quoted, value)
 	}
@@ -285,12 +285,12 @@ func (d *Document) RestoreMasks(candidate string) (string, error) {
 }
 func (d *Document) PatchProxy(name string, fields map[string]any, remove bool) (string, error) {
 	if d.Role != "frpc" || d.Editability() != "" {
-		return "", errors.New("instance does not support proxy forms")
+		return "", errors.New("此实例不支持代理表单")
 	}
 	allowed := map[string]bool{"name": true, "type": true, "localIP": true, "localPort": true, "remotePort": true, "customDomains": true, "locations": true, "enabled": true}
 	for k := range fields {
 		if !allowed[k] {
-			return "", errors.New("unsupported proxy field")
+			return "", errors.New("不支持此代理字段")
 		}
 	}
 	for _, k := range []string{"localPort", "remotePort"} {
@@ -298,12 +298,12 @@ func (d *Document) PatchProxy(name string, fields map[string]any, remove bool) (
 			switch n := v.(type) {
 			case float64:
 				if math.IsNaN(n) || math.IsInf(n, 0) || n != math.Trunc(n) || n < 1 || n > 65535 {
-					return "", errors.New("proxy ports must be integers in 1..65535")
+					return "", errors.New("代理端口必须为 1～65535 的整数")
 				}
 				fields[k] = int64(n)
 			case int, int64:
 			default:
-				return "", errors.New("proxy ports must be integers")
+				return "", errors.New("代理端口必须为整数")
 			}
 		}
 	}
@@ -340,13 +340,13 @@ func (d *Document) PatchProxy(name string, fields map[string]any, remove bool) (
 	}
 	if remove {
 		if begin < 0 {
-			return "", errors.New("proxy no longer exists")
+			return "", errors.New("代理已不存在")
 		}
 		return strings.Join(append(lines[:begin], lines[end:]...), "\n"), nil
 	}
 	if begin < 0 {
 		if name != "" {
-			return "", errors.New("proxy no longer exists")
+			return "", errors.New("代理已不存在")
 		}
 		b, e := toml.Marshal(map[string]any{"proxies": []any{fields}})
 		if e != nil {
@@ -357,7 +357,7 @@ func (d *Document) PatchProxy(name string, fields map[string]any, remove bool) (
 	// Nested proxy tables can contain identical keys. Do not guess field ownership.
 	for _, l := range lines[begin+1 : end] {
 		if strings.HasPrefix(strings.TrimSpace(l), "[") {
-			return "", errors.New("nested proxy tables require advanced editing")
+			return "", errors.New("嵌套代理表格需要使用高级编辑")
 		}
 	}
 	replacement := append([]string{}, lines[begin:end]...)

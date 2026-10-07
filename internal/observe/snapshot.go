@@ -62,18 +62,18 @@ func LoadSnapshot(path string) (Snapshot, error) {
 		return s, e
 	}
 	if s.Version != 1 || len(s.ProfileRevision) != 64 || s.CollectedAt <= 0 || s.Config.Editable || s.Runtime.Layers == nil {
-		return s, errors.New("invalid observation snapshot")
+		return s, errors.New("采集快照无效")
 	}
 	if s.CollectedAt > time.Now().Unix()+5 {
-		return s, errors.New("snapshot time is in the future")
+		return s, errors.New("快照时间晚于当前时间")
 	}
 	s.Stale = time.Now().Unix()-s.CollectedAt > 120
 	if s.Stale {
 		for _, k := range []string{"installation", "process", "authentication", "registration", "localService", "business"} {
-			s.Runtime.Layers[k] = managed.Check{Status: "not_checked", Evidence: "Snapshot expired; collect again on the host", At: s.CollectedAt, Source: "read-only snapshot"}
+			s.Runtime.Layers[k] = managed.Check{Status: "not_checked", Evidence: "快照已过期；请在主机重新采集", At: s.CollectedAt, Source: "只读快照"}
 		}
 		s.Traffic.RateAvailable = false
-		s.Nginx.ProcessCheck = managed.Check{Status: "not_checked", Evidence: "Snapshot expired; collect again on the host", At: s.CollectedAt, Source: "read-only snapshot"}
+		s.Nginx.ProcessCheck = managed.Check{Status: "not_checked", Evidence: "快照已过期；请在主机重新采集", At: s.CollectedAt, Source: "只读快照"}
 	}
 	return s, nil
 }
@@ -88,7 +88,7 @@ func (t *Traffic) WithPrevious(s, previous Snapshot) {
 	t.RateAvailable = true
 }
 func readProcess(ctx context.Context, t Target, run Runner) (managed.Process, managed.Check) {
-	c := managed.Check{Status: "not_checked", Evidence: "No runtime target registered", At: time.Now().Unix(), Source: "administrator observation profile"}
+	c := managed.Check{Status: "not_checked", Evidence: "未登记运行目标", At: time.Now().Unix(), Source: "管理员采集配置"}
 	var p managed.Process
 	if t.Kind == "" {
 		return p, c
@@ -126,16 +126,16 @@ func readProcess(ctx context.Context, t Target, run Runner) (managed.Process, ma
 			}
 		}
 	}
-	c.Source = t.Kind + " read-only metadata"
+	c.Source = t.Kind + "只读元数据"
 	if e != nil {
-		c.Evidence = "Runtime metadata unavailable"
+		c.Evidence = "运行元数据不可读取"
 		return managed.Process{}, c
 	}
 	c.Status = "failed"
-	c.Evidence = "Registered process is not running"
+	c.Evidence = "登记的进程未运行"
 	if p.PID > 0 && (p.State == "running" || p.State == "active") {
 		c.Status = "passed"
-		c.Evidence = "Registered process reports running with a PID"
+		c.Evidence = "登记的进程报告正在运行，且具有进程 PID"
 	}
 	// Never return arbitrary daemon strings.
 	switch p.State {
@@ -154,12 +154,12 @@ func Collect(ctx context.Context, p Profile, run Runner) (Snapshot, error) {
 		run = command
 	}
 	if managed.TrustedFile(p.Config) != nil {
-		return Snapshot{}, errors.New("FRPS configuration must be a protected root-owned regular file")
+		return Snapshot{}, errors.New("FRPS 配置必须是受保护且归 root 所有的普通文件")
 	}
 	m := config.Manager{Instances: map[string]config.Instance{"frps": {ID: "frps", Role: "frps", Path: p.Config}}}
 	d, e := m.Read("frps")
 	if e != nil {
-		return Snapshot{}, errors.New("FRPS TOML cannot be read or parsed")
+		return Snapshot{}, errors.New("FRPS TOML 配置无法读取或解析")
 	}
 	s := collectDocument(ctx, p, d, run)
 	// Discard this collection if the authoritative configuration changed.
@@ -172,16 +172,16 @@ func Collect(ctx context.Context, p Profile, run Runner) (Snapshot, error) {
 func collectDocument(ctx context.Context, p Profile, d *config.Document, run Runner) Snapshot {
 	s := Snapshot{Version: 1, ProfileRevision: profileRevision(p), CollectedAt: time.Now().Unix(), Config: d.Snapshot(), Runtime: managed.Unknown(config.Revision(d.Raw)), Clients: []Client{}, Proxies: []Proxy{}, Logs: []LogWindow{}}
 	s.Config.Editable = false
-	s.Config.Reason = "Existing deployment is observed read-only; no configuration or service changes are available."
+	s.Config.Reason = "已有部署仅支持只读采集；不能修改原配置或服务。"
 	// Reconstruct from scrubbed values; comments and arbitrary raw text never leave the collector.
 	if b, e := toml.Marshal(s.Config.Values); e == nil {
 		s.Config.Text = string(b)
 	} else {
-		s.Config.Text = "# read-only configuration preview unavailable"
+		s.Config.Text = "# 只读配置预览暂不可用"
 	}
 	s.Runtime.Process, s.Runtime.Layers["process"] = readProcess(ctx, p.Runtime, run)
 	set := func(k, status, evidence string) {
-		s.Runtime.Layers[k] = managed.Check{Status: status, Evidence: evidence, At: s.CollectedAt, Source: "FRPS loopback API"}
+		s.Runtime.Layers[k] = managed.Check{Status: status, Evidence: evidence, At: s.CollectedAt, Source: "FRPS 回环管理接口"}
 	}
 	var info struct {
 		Version         string `json:"version"`
@@ -196,7 +196,7 @@ func collectDocument(ctx context.Context, p Profile, d *config.Document, run Run
 			s.Traffic = Traffic{Available: true, In: *info.TotalTrafficIn, Out: *info.TotalTrafficOut, Connections: *info.CurConns, Clients: *info.ClientCounts}
 		}
 		if info.ClientCounts != nil && *info.ClientCounts > 0 {
-			set("authentication", "passed", "Authenticated client count observed")
+			set("authentication", "passed", "已读取到通过认证的客户端数量")
 		}
 	}
 	if managed.ReadServerAPI(ctx, d, "/api/clients", &s.Clients) == nil {
@@ -247,8 +247,8 @@ func collectDocument(ctx context.Context, p Profile, d *config.Document, run Run
 		}
 	}
 	if complete && online > 0 {
-		set("registration", "passed", "Online proxies observed; only four supported proxy types queried")
-		set("authentication", "passed", "Online proxies imply authenticated clients")
+		set("registration", "passed", "已读取到在线代理；仅查询四种支持的代理类型")
+		set("authentication", "passed", "在线代理表明有客户端已通过认证")
 	}
 	if p.Nginx != nil {
 		s.Nginx = ReadNginx(*p.Nginx, d)

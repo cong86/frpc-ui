@@ -36,7 +36,7 @@ func Open(root string) (*Store, error) {
 	if os.IsNotExist(err) {
 		// Never replace a missing key belonging to an existing database.
 		if _, e := os.Stat(filepath.Join(root, "console.db")); e == nil {
-			return nil, errors.New("backup key missing; restore the original key before starting")
+			return nil, errors.New("备份密钥缺失；启动前请恢复原密钥")
 		}
 		key = make([]byte, 32)
 		if _, err = rand.Read(key); err != nil {
@@ -48,7 +48,7 @@ func Open(root string) (*Store, error) {
 		return nil, err
 	}
 	if len(key) != 32 {
-		return nil, errors.New("invalid backup key")
+		return nil, errors.New("备份密钥无效")
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -97,7 +97,7 @@ func (s *Store) Seal(text string) []byte {
 func (s *Store) Unseal(b []byte) (string, error) {
 	n := s.aead.NonceSize()
 	if len(b) < n {
-		return "", errors.New("invalid encrypted snapshot")
+		return "", errors.New("加密快照无效")
 	}
 	p, e := s.aead.Open(nil, b[:n], b[n:], nil)
 	return string(p), e

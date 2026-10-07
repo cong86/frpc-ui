@@ -74,23 +74,23 @@ func Load(path string) (*Manifest, error) {
 		return nil, e
 	}
 	if len(raw) > config.MaxSize {
-		return nil, errors.New("manifest too large")
+		return nil, errors.New("管理清单超出大小限制")
 	}
 	var m Manifest
 	if e = json.Unmarshal(raw, &m); e != nil {
-		return nil, errors.New("invalid managed manifest")
+		return nil, errors.New("管理清单无效")
 	}
 	if m.Version != 1 || !filepath.IsAbs(m.Root) || len(m.Instances) == 0 || len(m.Instances) > 2 {
-		return nil, errors.New("unsupported managed manifest")
+		return nil, errors.New("不支持此管理清单")
 	}
 	seen := map[string]bool{}
 	for _, i := range m.Instances {
 		if (i.ID != "frpc" && i.ID != "frps") || i.ID != i.Role || seen[i.ID] {
-			return nil, errors.New("invalid managed role")
+			return nil, errors.New("管理实例角色无效")
 		}
 		seen[i.ID] = true
 		if i.Config != filepath.Join(m.Root, "data", "instances", i.ID, i.ID+".toml") || i.Binary != filepath.Join(m.Root, "frp", i.ID) || i.Unit != m.Name+"-"+i.ID+".service" {
-			return nil, errors.New("manifest paths or unit do not match installation")
+			return nil, errors.New("清单路径或服务单元与安装记录不匹配")
 		}
 		if e = trusted(i.Binary); e != nil {
 			return nil, e
@@ -98,7 +98,7 @@ func Load(path string) (*Manifest, error) {
 	}
 	for _, p := range m.Probes {
 		if !seen[p.Instance] {
-			return nil, errors.New("probe instance is not registered")
+			return nil, errors.New("探针所属实例未登记")
 		}
 		if e = ValidateProbe(p); e != nil {
 			return nil, e
@@ -110,31 +110,31 @@ func ValidateProbe(p Probe) error {
 	host, port, e := net.SplitHostPort(p.Address)
 	n, ne := strconv.Atoi(port)
 	if e != nil || ne != nil || net.ParseIP(host) == nil || n < 1 || n > 65535 {
-		return errors.New("probe requires literal IP and valid port")
+		return errors.New("探针必须使用明确的 IP 地址和有效端口")
 	}
 	if p.Scope != "local" && p.Scope != "business" {
-		return errors.New("invalid probe scope")
+		return errors.New("探针范围无效")
 	}
 	if p.Kind == "tcp" {
 		if p.Scope != "local" {
-			return errors.New("TCP connect alone cannot verify business")
+			return errors.New("仅建立 TCP 连接不能验证业务")
 		}
 		return nil
 	}
 	if p.Kind == "udp" {
 		if p.Prefix == "" || len(p.Prefix) > 128 {
-			return errors.New("UDP requires a response prefix")
+			return errors.New("UDP 探针必须登记响应前缀")
 		}
 		return nil
 	}
 	if p.Kind != "http" && p.Kind != "https" {
-		return errors.New("unsupported probe protocol")
+		return errors.New("不支持此探针协议")
 	}
 	if len(p.SHA256) != 64 || p.Status < 100 || p.Status > 599 || !strings.HasPrefix(p.Path, "/") || strings.ContainsAny(p.Path+p.Host, "\r\n") {
-		return errors.New("HTTP probe requires status and body SHA-256")
+		return errors.New("HTTP 探针必须登记响应状态码和响应体 SHA-256")
 	}
 	if _, e = hex.DecodeString(p.SHA256); e != nil {
-		return errors.New("invalid response digest")
+		return errors.New("响应摘要无效")
 	}
 	return nil
 }
@@ -169,7 +169,7 @@ type Collector struct {
 func Unknown(revision string) Observation {
 	o := Observation{Revision: revision, Layers: map[string]Check{}, Proxies: []Proxy{}}
 	for _, k := range []string{"installation", "process", "authentication", "registration", "localService", "business"} {
-		o.Layers[k] = Check{Status: "not_checked", Evidence: "No evidence collected"}
+		o.Layers[k] = Check{Status: "not_checked", Evidence: "尚未采集到验证证据"}
 	}
 	return o
 }
@@ -194,10 +194,10 @@ func (c *Collector) Observe(ctx context.Context, id string, d *config.Document, 
 	}
 	digest, e := Digest(inst.Binary)
 	if e != nil || digest != inst.BinaryHash {
-		c.set(&o, "installation", "failed", "manifest", "Official binary changed or unavailable")
+		c.set(&o, "installation", "failed", "manifest", "官方程序发生变化或不可读取")
 		return o
 	}
-	c.set(&o, "installation", "passed", "manifest + SHA-256", "Registered official binary digest matches")
+	c.set(&o, "installation", "passed", "安装清单与 SHA-256", "登记的官方程序摘要匹配")
 	run := c.Run
 	if run == nil {
 		run = func(ctx context.Context, n string, a ...string) ([]byte, error) {
@@ -206,7 +206,7 @@ func (c *Collector) Observe(ctx context.Context, id string, d *config.Document, 
 	}
 	raw, e := run(ctx, "systemctl", "show", inst.Unit, "--no-pager", "--property=LoadState,ActiveState,SubState,MainPID")
 	if e != nil {
-		c.set(&o, "process", "failed", "systemd", "Unable to read registered unit")
+		c.set(&o, "process", "failed", "systemd", "无法读取登记的服务单元")
 		return o
 	}
 	fields := map[string]string{}
@@ -219,15 +219,15 @@ func (c *Collector) Observe(ctx context.Context, id string, d *config.Document, 
 	pid, _ := strconv.Atoi(fields["MainPID"])
 	o.Process = Process{fields["ActiveState"], fields["SubState"], pid}
 	if fields["LoadState"] != "loaded" || o.Process.State != "active" || pid == 0 {
-		c.set(&o, "process", "failed", "systemd", "Registered unit is not active with a live PID")
+		c.set(&o, "process", "failed", "systemd", "登记的服务未启动或没有有效进程 PID")
 		return o
 	}
-	c.set(&o, "process", "passed", "systemd", "Registered unit active with a live PID")
+	c.set(&o, "process", "passed", "systemd", "登记的服务已启动，且具有有效进程 PID")
 	get := func(path string, v any) error { return adminGet(ctx, d.Values, path, v) }
 	var response map[string]json.RawMessage
 	if inst.Role == "frpc" {
 		if e = get("/api/status", &response); e != nil {
-			c.set(&o, "registration", "not_checked", "FRPC loopback API", "Admin interface unavailable or access denied")
+			c.set(&o, "registration", "not_checked", "FRPC 回环管理接口", "管理接口不可用或访问被拒绝")
 		} else {
 			active := 0
 			missing := 0
@@ -259,14 +259,14 @@ func (c *Collector) Observe(ctx context.Context, id string, d *config.Document, 
 			}
 			missing = len(expected)
 			if active > 0 {
-				c.set(&o, "authentication", "passed", "FRPC API", "Currently registered running proxy proves an authenticated control connection")
+				c.set(&o, "authentication", "passed", "FRPC 管理接口", "当前已注册且运行中的代理表明控制连接已通过认证")
 			} else {
-				c.set(&o, "authentication", "not_checked", "FRPC API", "Without a running proxy this API does not directly prove client authentication")
+				c.set(&o, "authentication", "not_checked", "FRPC 管理接口", "没有运行中的代理时，此接口不能直接证明客户端认证成功")
 			}
 			if missing > 0 {
-				c.set(&o, "registration", "failed", "FRPC API", "Some enabled proxy definitions are not running")
+				c.set(&o, "registration", "failed", "FRPC 管理接口", "部分已启用的代理未运行")
 			} else if active > 0 {
-				c.set(&o, "registration", "passed", "FRPC API", "All enabled configured proxies report running")
+				c.set(&o, "registration", "passed", "FRPC 管理接口", "配置中所有启用的代理均报告正在运行")
 			}
 		}
 	} else {
@@ -274,7 +274,7 @@ func (c *Collector) Observe(ctx context.Context, id string, d *config.Document, 
 			Clients int `json:"clientCounts"`
 		}
 		if get("/api/serverinfo", &info) == nil && info.Clients > 0 {
-			c.set(&o, "authentication", "passed", "FRPS API", "Current authenticated clients observed")
+			c.set(&o, "authentication", "passed", "FRPS 管理接口", "已读取到当前通过认证的客户端")
 		}
 		count := 0
 		complete := true
@@ -297,8 +297,8 @@ func (c *Collector) Observe(ctx context.Context, id string, d *config.Document, 
 			}
 		}
 		if complete && count > 0 {
-			c.set(&o, "registration", "passed", "FRPS API", "Online proxy registrations observed")
-			c.set(&o, "authentication", "passed", "FRPS API", "Online proxies imply authenticated clients")
+			c.set(&o, "registration", "passed", "FRPS 管理接口", "已读取到在线代理注册记录")
+			c.set(&o, "authentication", "passed", "FRPS 管理接口", "在线代理表明有客户端已通过认证")
 		}
 	}
 	// Probe targets are immutable installation metadata, never arbitrary browser URLs.
@@ -323,7 +323,7 @@ func (c *Collector) Observe(ctx context.Context, id string, d *config.Document, 
 				if failed > 0 {
 					status = "failed"
 				}
-				c.set(&o, key, status, "registered explicit probes", fmt.Sprintf("%d/%d protocol checks passed", total-failed, total))
+				c.set(&o, key, status, "已登记的明确探针", fmt.Sprintf("%d/%d 项协议检查通过", total-failed, total))
 			}
 		}
 	}
@@ -357,7 +357,7 @@ func adminGet(ctx context.Context, values map[string]any, path string, out any) 
 	ip := net.ParseIP(address)
 	port := number(v["port"])
 	if ip == nil || !ip.IsLoopback() || port < 1 || port > 65535 || v["tls"] != nil {
-		return errors.New("only non-TLS loopback FRP API supported")
+		return errors.New("当前仅支持不使用 TLS 的 FRP 回环管理接口")
 	}
 	req, e := http.NewRequestWithContext(ctx, "GET", "http://"+net.JoinHostPort(address, strconv.Itoa(port))+path, nil)
 	if e != nil {
@@ -370,11 +370,11 @@ func adminGet(ctx context.Context, values map[string]any, path string, out any) 
 	defer client.CloseIdleConnections()
 	resp, e := client.Do(req)
 	if e != nil {
-		return errors.New("admin API unavailable")
+		return errors.New("管理接口不可用")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return errors.New("admin API rejected access")
+		return errors.New("管理接口拒绝访问")
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out)
 }
@@ -385,7 +385,7 @@ func ReadServerAPI(ctx context.Context, d *config.Document, path string, out any
 	case "/api/serverinfo", "/api/clients", "/api/proxy/tcp", "/api/proxy/udp", "/api/proxy/http", "/api/proxy/https":
 		return adminGet(ctx, d.Values, path, out)
 	default:
-		return errors.New("unsupported observation route")
+		return errors.New("不支持此采集接口路径")
 	}
 }
 
@@ -400,7 +400,7 @@ func ProbeOnce(ctx context.Context, p Probe) error {
 	if p.Kind == "tcp" || p.Kind == "udp" {
 		conn, e := (&net.Dialer{}).DialContext(ctx, p.Kind, p.Address)
 		if e != nil {
-			return errors.New("service unreachable")
+			return errors.New("服务不可达")
 		}
 		defer conn.Close()
 		_ = conn.SetDeadline(time.Now().Add(4 * time.Second))
@@ -417,7 +417,7 @@ func ProbeOnce(ctx context.Context, p Probe) error {
 		buf := make([]byte, 1024)
 		n, e := conn.Read(buf)
 		if e != nil || string(buf[:n]) != p.Prefix+string(nonce) {
-			return errors.New("UDP protocol response mismatch")
+			return errors.New("UDP 协议响应不匹配")
 		}
 		return nil
 	}
@@ -425,11 +425,11 @@ func ProbeOnce(ctx context.Context, p Probe) error {
 	if p.CAFile != "" {
 		pem, e := os.ReadFile(p.CAFile)
 		if e != nil {
-			return errors.New("CA unavailable")
+			return errors.New("CA 证书不可读取")
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(pem) {
-			return errors.New("CA invalid")
+			return errors.New("CA 证书无效")
 		}
 		tlsConfig.RootCAs = pool
 	}
@@ -444,16 +444,16 @@ func ProbeOnce(ctx context.Context, p Probe) error {
 	defer client.CloseIdleConnections()
 	resp, e := client.Do(req)
 	if e != nil {
-		return errors.New("HTTP/TLS request failed")
+		return errors.New("HTTP/TLS 请求失败")
 	}
 	defer resp.Body.Close()
 	body, e := io.ReadAll(io.LimitReader(resp.Body, 65537))
 	if e != nil || len(body) > 65536 {
-		return errors.New("response exceeds verification limit")
+		return errors.New("响应超出验证大小限制")
 	}
 	hash := sha256.Sum256(body)
 	if resp.StatusCode != p.Status || hex.EncodeToString(hash[:]) != p.SHA256 {
-		return errors.New("HTTP status or response digest mismatch")
+		return errors.New("HTTP 状态码或响应摘要不匹配")
 	}
 	return nil
 }

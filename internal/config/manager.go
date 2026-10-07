@@ -43,14 +43,14 @@ type Plan struct {
 func (m *Manager) Read(id string) (*Document, error) {
 	i, ok := m.Instances[id]
 	if !ok {
-		return nil, errors.New("unknown instance")
+		return nil, errors.New("未知实例")
 	}
 	st, e := os.Lstat(i.Path)
 	if e != nil {
-		return nil, errors.New("configuration unavailable")
+		return nil, errors.New("配置不可读取")
 	}
 	if !st.Mode().IsRegular() || st.Size() > MaxSize {
-		return nil, errors.New("configuration must be a regular file below 1 MiB")
+		return nil, errors.New("配置必须是小于 1 MiB 的普通文件")
 	}
 	b, e := os.ReadFile(i.Path)
 	if e != nil {
@@ -60,7 +60,7 @@ func (m *Manager) Read(id string) (*Document, error) {
 }
 func Verify(binary, role, raw, dir string) error {
 	if binary == "" {
-		return errors.New("official FRP binary not configured; write plan unavailable")
+		return errors.New("未配置官方 FRP 程序，无法生成写入计划")
 	}
 	f, e := os.CreateTemp(dir, "verify-*.toml")
 	if e != nil {
@@ -81,21 +81,21 @@ func Verify(binary, role, raw, dir string) error {
 	// Only verify is invoked. This never starts a tunnel or contacts a server.
 	cmd := exec.CommandContext(ctx, binary, "verify", "-c", name)
 	if e = cmd.Run(); e != nil {
-		return fmt.Errorf("official %s verify failed; review configuration (raw diagnostic suppressed)", role)
+		return fmt.Errorf("官方 %s 配置校验失败；请检查配置（原始诊断信息已隐藏）", role)
 	}
 	return nil
 }
 func binaryRevision(path string) (string, error) {
 	if path == "" {
-		return "", errors.New("official FRP binary not configured; write plan unavailable")
+		return "", errors.New("未配置官方 FRP 程序，无法生成写入计划")
 	}
 	st, e := os.Lstat(path)
 	if e != nil || !st.Mode().IsRegular() {
-		return "", errors.New("official FRP binary must be an available regular file")
+		return "", errors.New("官方 FRP 程序必须是可读取的普通文件")
 	}
 	f, e := os.Open(path)
 	if e != nil {
-		return "", errors.New("official FRP binary unavailable")
+		return "", errors.New("官方 FRP 程序不可读取")
 	}
 	defer f.Close()
 	h := sha256.New()
@@ -107,10 +107,10 @@ func binaryRevision(path string) (string, error) {
 func (m *Manager) NewPlan(id, actor, revision, candidate string) (Plan, error) {
 	i, ok := m.Instances[id]
 	if !ok {
-		return Plan{}, errors.New("unknown instance")
+		return Plan{}, errors.New("未知实例")
 	}
 	if !i.Managed {
-		return Plan{}, errors.New("adopted deployments are read-only in this milestone")
+		return Plan{}, errors.New("当前阶段已有部署仅支持只读接入")
 	}
 	d, e := m.Read(id)
 	if e != nil {
@@ -128,7 +128,7 @@ func (m *Manager) NewPlan(id, actor, revision, candidate string) (Plan, error) {
 func (m *Manager) ProxyPlan(id, actor, revision, name string, fields map[string]any, remove bool) (Plan, error) {
 	i, ok := m.Instances[id]
 	if !ok || !i.Managed {
-		return Plan{}, errors.New("instance is read-only")
+		return Plan{}, errors.New("此实例仅支持只读查看")
 	}
 	d, e := m.Read(id)
 	if e != nil {
@@ -160,9 +160,9 @@ func (m *Manager) rawPlan(id, actor string, d *Document, raw string) (Plan, erro
 		return Plan{}, e
 	}
 	if now, e := binaryRevision(i.Binary); e != nil || now != binaryRev {
-		return Plan{}, errors.New("FRP binary changed during validation")
+		return Plan{}, errors.New("FRP 程序在校验期间发生变化")
 	}
-	p := Plan{ID: state.ID(), Instance: id, Before: d.Snapshot().Text, After: next.Snapshot().Text, Revision: Revision(d.Raw), Validation: "official_binary_verified", Impact: "Save isolated configuration only. FRP is not started or reloaded; runtime and business remain unverified."}
+	p := Plan{ID: state.ID(), Instance: id, Before: d.Snapshot().Text, After: next.Snapshot().Text, Revision: Revision(d.Raw), Validation: "official_binary_verified", Impact: "仅保存隔离配置，不启动或重载 FRP；运行和业务仍未验证。"}
 	_, e = m.State.DB.Exec("INSERT INTO plans(id,instance,actor,revision,candidate,created,state,binary_revision) VALUES(?,?,?,?,?,?,?,?)", p.ID, id, actor, p.Revision, m.State.Seal(raw), time.Now().Unix(), "preview", binaryRev)
 	return p, e
 }
@@ -195,25 +195,25 @@ func (m *Manager) Apply(id, actor string) (string, error) {
 	var created int64
 	e := m.State.DB.QueryRow("SELECT instance,actor,revision,candidate,created,state,binary_revision FROM plans WHERE id=?", id).Scan(&inst, &owner, &revision, &enc, &created, &status, &expectedBinary)
 	if e != nil || owner != actor {
-		return "", errors.New("plan unavailable")
+		return "", errors.New("计划不可读取")
 	}
 	if status == "saved_offline" {
 		return status, nil
 	}
 	if status != "preview" {
-		return "", errors.New("operation requires recovery or was canceled")
+		return "", errors.New("此操作需要恢复检查，或已取消")
 	}
 	if time.Now().Unix()-created > 900 {
-		return "", errors.New("plan expired")
+		return "", errors.New("计划已过期")
 	}
 	i, ok := m.Instances[inst]
 	if !ok || !i.Managed {
-		return "", errors.New("instance is read-only")
+		return "", errors.New("此实例仅支持只读查看")
 	}
 	lock := i.Path + ".console-lock"
 	release, e := filelock.Acquire(lock)
 	if e != nil {
-		return "", errors.New("configuration is locked by another writer")
+		return "", errors.New("配置正在被其他写入进程锁定")
 	}
 	defer release()
 	d, e := m.Read(inst)
@@ -224,7 +224,7 @@ func (m *Manager) Apply(id, actor string) (string, error) {
 		return "", ErrConflict
 	}
 	if now, e := binaryRevision(i.Binary); e != nil || now != expectedBinary {
-		return "", errors.New("FRP binary changed since preview; create a new plan")
+		return "", errors.New("FRP 程序在预览后发生变化；请重新生成计划")
 	}
 	raw, e := m.State.Unseal(enc)
 	if e != nil {
@@ -234,7 +234,7 @@ func (m *Manager) Apply(id, actor string) (string, error) {
 		return "", e
 	}
 	if now, e := binaryRevision(i.Binary); e != nil || now != expectedBinary {
-		return "", errors.New("FRP binary changed during validation")
+		return "", errors.New("FRP 程序在校验期间发生变化")
 	}
 	// Last check after validation. Exclusively-owned managed files only.
 	again, e := m.Read(inst)
@@ -260,11 +260,11 @@ func (m *Manager) Apply(id, actor string) (string, error) {
 	}
 	if e = atomicWrite(i.Path, raw); e != nil {
 		_, _ = m.State.DB.Exec("UPDATE plans SET state='recovery_required',result='file write failed' WHERE id=?", id)
-		return "", errors.New("file write failed; recovery required")
+		return "", errors.New("文件写入失败；需要恢复检查")
 	}
 	_, e = m.State.DB.Exec("UPDATE plans SET state='saved_offline',result='runtime unverified' WHERE id=?", id)
 	if e != nil {
-		return "", errors.New("configuration saved but journal unfinished; recovery required")
+		return "", errors.New("配置已保存，但操作记录未完成；需要恢复检查")
 	}
 	_ = m.State.Audit(actor, "save", inst, "saved_offline")
 	return "saved_offline", nil
@@ -276,7 +276,7 @@ func (m *Manager) Cancel(id, actor string) error {
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return errors.New("preview unavailable")
+		return errors.New("预览不可读取")
 	}
 	return nil
 }
@@ -285,10 +285,10 @@ func (m *Manager) RestorePlan(operation, actor string) (Plan, error) {
 	var enc []byte
 	e := m.State.DB.QueryRow("SELECT instance,state,backup FROM plans WHERE id=?", operation).Scan(&inst, &status, &enc)
 	if e != nil || len(enc) == 0 {
-		return Plan{}, errors.New("backup unavailable")
+		return Plan{}, errors.New("备份不可读取")
 	}
 	if status != "saved_offline" && status != "recovery_required" {
-		return Plan{}, errors.New("operation is not restorable")
+		return Plan{}, errors.New("此操作记录无法恢复")
 	}
 	raw, e := m.State.Unseal(enc)
 	if e != nil {
@@ -302,7 +302,7 @@ func (m *Manager) RestorePlan(operation, actor string) (Plan, error) {
 }
 func (m *Manager) newRestoredPlan(inst, actor string, d *Document, raw string) (Plan, error) {
 	if !m.Instances[inst].Managed {
-		return Plan{}, errors.New("instance read-only")
+		return Plan{}, errors.New("此实例仅支持只读查看")
 	}
 	return m.rawPlan(inst, actor, d, raw)
 }
