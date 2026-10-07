@@ -19,13 +19,14 @@ const MaxSize = 1 << 20
 var ErrConflict = errors.New("配置已被修改；请刷新并重新生成计划")
 var keyLine = regexp.MustCompile(`^([ \t]*[A-Za-z0-9_."'-]+[ \t]*=[ \t]*)(.*)$`)
 var header = regexp.MustCompile(`^[ \t]*\[\[proxies\]\][ \t]*(?:#.*)?$`)
-var sensitive = regexp.MustCompile(`(?i)(token|password|passwd|secret|authorization|proxyurl|groupkey|privatekey)`)
+var sensitive = regexp.MustCompile(`(?i)(token|password|passwd|pwd|secret|authorization|proxyurl|groupkey|privatekey)`)
 var marker = regexp.MustCompile(`__FRP_REDACTED_[0-9]+__`)
 
 type Document struct {
 	Raw    string
 	Values map[string]any
 	Role   string
+	Format string
 }
 type Snapshot struct {
 	Revision string         `json:"revision"`
@@ -33,6 +34,7 @@ type Snapshot struct {
 	Values   map[string]any `json:"values"`
 	Editable bool           `json:"editable"`
 	Reason   string         `json:"reason,omitempty"`
+	Format   string         `json:"format,omitempty"`
 }
 
 func Revision(raw string) string { h := sha256.Sum256([]byte(raw)); return hex.EncodeToString(h[:]) }
@@ -55,12 +57,20 @@ func Parse(raw, role string) (*Document, error) {
 	if strings.ContainsRune(raw, 0) {
 		return nil, errors.New("配置不能包含空字符")
 	}
-	v := map[string]any{}
-	if err := toml.Unmarshal([]byte(raw), &v); err != nil {
-		return nil, errors.New("TOML 配置无效；请检查语法，避免暴露凭据")
-	}
 	if role != "frpc" && role != "frps" {
 		return nil, errors.New("实例角色无效")
+	}
+	if legacyCommon.MatchString(strings.TrimPrefix(raw, "\ufeff")) {
+		return parseLegacyServer(raw, role)
+	}
+	v := map[string]any{}
+	if err := toml.Unmarshal([]byte(raw), &v); err != nil {
+		var syntax *toml.DecodeError
+		if errors.As(err, &syntax) {
+			row, col := syntax.Position()
+			return nil, fmt.Errorf("TOML 配置语法无效（第 %d 行，第 %d 列）；错误内容已隐藏，请检查原文件", row, col)
+		}
+		return nil, errors.New("TOML 配置无效；请检查语法，避免暴露凭据")
 	}
 	if p, ok := v["proxies"]; ok {
 		if role != "frpc" {
@@ -88,9 +98,12 @@ func Parse(raw, role string) (*Document, error) {
 			}
 		}
 	}
-	return &Document{Raw: raw, Values: v, Role: role}, nil
+	return &Document{Raw: raw, Values: v, Role: role, Format: "toml"}, nil
 }
 func (d *Document) Editability() string {
+	if d.Format == "ini" {
+		return "旧 INI 配置只读；显示的是脱敏字段投影，原文件未迁移或修改"
+	}
 	if strings.Contains(d.Raw, `"""`) || strings.Contains(d.Raw, `'''`) {
 		return "当前阶段多行字符串仅支持只读查看"
 	}
@@ -249,7 +262,7 @@ func (d *Document) Snapshot() Snapshot {
 			text = "# 预览暂不可用"
 		}
 	}
-	return Snapshot{Revision: Revision(d.Raw), Text: text, Values: values, Editable: reason == "", Reason: reason}
+	return Snapshot{Revision: Revision(d.Raw), Text: text, Values: values, Editable: reason == "", Reason: reason, Format: d.Format}
 }
 func (d *Document) RestoreMasks(candidate string) (string, error) {
 	if d.Editability() != "" {

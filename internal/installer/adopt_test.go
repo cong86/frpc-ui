@@ -42,6 +42,49 @@ func TestAdoptionWizardConfirmsFoundConfigAndSeparateNginxMounts(t *testing.T) {
 		t.Fatal("scope not shown")
 	}
 }
+
+func TestAdoptionWizardAutomaticallyRecognizesBothDockerTargets(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX paths verified on Linux")
+	}
+	input := "\n\n\n\n\n\n\n1\n\n\n\n\n1\n\n\n"
+	var output strings.Builder
+	lookedUp := []string{}
+	detect := func(_ context.Context, name string) observe.RuntimeDiscovery {
+		lookedUp = append(lookedUp, name)
+		return observe.RuntimeDiscovery{Candidates: []observe.Target{{Kind: "docker", Name: name}}}
+	}
+	discover := func(_ context.Context, role string, target observe.Target) observe.Discovery {
+		if target.Kind != "docker" || target.Name != role {
+			t.Fatal("auto-selected wrong runtime", target)
+		}
+		if role == "frps" {
+			return observe.Discovery{Candidates: []observe.DiscoveredConfig{{Path: "/home/frp/frps.toml"}}}
+		}
+		n := &observe.NginxProfile{Entry: "/home/nginx/nginx.conf", Prefix: "/etc/nginx", Roots: []string{"/home/nginx"}, Runtime: target}
+		return observe.Discovery{Candidates: []observe.DiscoveredConfig{{Path: n.Entry, Nginx: n}}}
+	}
+	r, e := adoptionWizardWithLookups(bufio.NewReader(strings.NewReader(input)), &output, discover, detect)
+	if e != nil || len(lookedUp) != 2 || r.Profile.Runtime.Kind != "docker" || r.Profile.Nginx == nil || r.Profile.Nginx.Runtime.Kind != "docker" || !strings.Contains(output.String(), "已识别默认目标") {
+		t.Fatal("automatic runtime selection failed", e, output.String())
+	}
+}
+
+func TestAdoptionWizardDoesNotGuessBetweenRegisteredRuntimes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX paths verified on Linux")
+	}
+	input := "\n\n\n\n/home/frp/frps.toml\n\n2\ncustom-frps\n\n0\n"
+	var output strings.Builder
+	r, e := adoptionWizardWithLookups(bufio.NewReader(strings.NewReader(input)), &output,
+		func(context.Context, string, observe.Target) observe.Discovery { return observe.Discovery{} },
+		func(context.Context, string) observe.RuntimeDiscovery {
+			return observe.RuntimeDiscovery{Candidates: []observe.Target{{Kind: "docker", Name: "frps"}, {Kind: "systemd", Name: "frps.service"}}}
+		})
+	if e != nil || r.Profile.Runtime.Name != "custom-frps" || r.Profile.Runtime.Kind != "docker" || !strings.Contains(output.String(), "未找到唯一") {
+		t.Fatal("ambiguous runtimes silently selected", e, output.String())
+	}
+}
 func TestAdoptionWizardMissingPathFallsBackAndDoesNotAcceptBlank(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX paths verified on Linux")

@@ -138,7 +138,7 @@ func NewAdoptionPlan(ctx context.Context, r AdoptionRequest, console string) (Ad
 	m := config.Manager{Instances: map[string]config.Instance{"frps": {ID: "frps", Role: "frps", Path: r.Profile.Config}}}
 	d, e := m.Read("frps")
 	if e != nil {
-		return AdoptionPlan{}, errors.New("已有 FRPS TOML 配置无法解析")
+		return AdoptionPlan{}, fmt.Errorf("已有 FRPS 配置无法读取或解析：%w", e)
 	}
 	hash, e := managed.Digest(console)
 	if e != nil {

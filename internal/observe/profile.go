@@ -155,7 +155,9 @@ func command(ctx context.Context, name string, args ...string) ([]byte, error) {
 	var b limitedBuffer
 	cmd.Stdout = &b
 	cmd.Stderr = &b
-	if cmd.Run() != nil || b.Overflow {
+	if e := cmd.Run(); os.IsNotExist(e) {
+		return nil, os.ErrNotExist
+	} else if e != nil || b.Overflow {
 		return nil, errors.New("只读命令不可用")
 	}
 	return b.Data, nil

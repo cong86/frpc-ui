@@ -3,7 +3,7 @@
 main() (
   set -Eeuo pipefail
   umask 077
-  console_version=v0.1.0-preview.9
+  console_version=v0.1.0-preview.10
   source_name=gitee
   frp_archive=''
   verify_only=false
