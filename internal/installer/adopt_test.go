@@ -58,7 +58,7 @@ func TestAdoptionCreatesNoFRPOrNginxControlUnit(t *testing.T) {
 			t.Fatal("existing service control in adoption")
 		}
 	}
-	if !strings.Contains(files[1].Content, "--observed-snapshot") || !strings.Contains(files[2].Content, "User=root") || !strings.Contains(files[3].Content, "OnUnitInactiveSec=30s") {
+	if !strings.Contains(files[1].Content, "--observed-snapshot") || !strings.Contains(files[2].Content, "User=root") || !strings.Contains(files[3].Content, "OnUnitInactiveSec=30s") || !strings.Contains(files[3].Content, "AccuracySec=1s") {
 		t.Fatal("incorrect isolation or refresh")
 	}
 }

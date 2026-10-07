@@ -26,7 +26,7 @@ FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序�
 - 旧 INI 迁移、已有部署写接管、同角色多实例、网页安装执行、运行应用、新安装实例日志、Compose 自动安装、Nginx 校验/加载、升级/卸载尚未实现。
 - 部署模板含明确凭据占位符，Compose 镜像摘要固定待实现；不能直接用于生产。
 - 无清单的 demo/导入保持运行未验证。新安装显示实测层级；未登记探针或证据不足仍未验证。运行结果描述当前进程和固定登记目标，不证明离线修改已应用或全部参数与文件相同。
-- 从 preview.6 起，一键入口可安装独立只读 UI 和定时采集服务，显示采集时间、过期状态及分层证据；已有 FRPS、Nginx 配置及运行服务不变。
+- 从 preview.7 起，一键入口可安装独立只读 UI 和定时采集服务，显示采集时间、过期状态及分层证据；已有 FRPS、Nginx 配置及运行服务不变。
 
 完整规格与开发清单见 [docs/v1-spec.md](docs/v1-spec.md)。
 
@@ -38,7 +38,7 @@ FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序�
 curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | sudo bash
 ```
 
-入口检测系统和架构，默认下载 preview.6，先选择操作模式，再下载并校验 SHA-256：
+入口检测系统和架构，默认下载 preview.7，先选择操作模式，再下载并校验 SHA-256：
 
 - **新安装**：选择 FRPC / FRPS / 两者、填写连接参数与 Token，预览并确认后安装独立 FRP 与 Console 服务。
 - **已有 FRPS 只读接入**：填写现有 TOML 路径、systemd 单元或 Docker 容器名、Nginx 配置与日志路径，预览并确认后安装低权限 UI 和定时采集服务。此模式只下载 Console，无需下载或重装官方 FRP。未启用的管理 API 保持未验证，程序不自动修改原配置。

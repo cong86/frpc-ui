@@ -26,6 +26,10 @@ WSL Ubuntu 24.04 systemd 使用随机命名专属目录、用户、单元和回�
 
 测试清理只针对本次随机创建的资源，保留用户既有文件与服务。
 
+## 发布包计时修复
+
+preview.6 的 GitHub 公网下载与摘要通过，但发布二进制复测遇到 10 秒 timer 未在 25 秒检查窗口刷新。目标 systemd 手册确认 AccuracySec 默认 1 分钟；已有本地测试恰好落在较早触发窗口，不能覆盖这项调度差异。preview.7 显式设置 AccuracySec=1s，保留 OnUnitInactiveSec，以避免一分钟合并窗口；增加生成单元检查并重跑真实 timer。原 preview.6 附件保留，不覆盖已发布文件。
+
 ## 验收边界
 
 Docker 仅模拟固定读取命令，Nginx 仅解析磁盘配置与日志 fixture；没有真实 Nginx worker 验收、图形交互、arm64 实机或生产权限测试。已有模式不自动开启 FRPS 管理 API、不迁移旧 INI、不写入原配置、不执行反代加载。完整写接管和升级仍未完成。公网 Release 与 Gitee 下载结果在发布后另行核验。

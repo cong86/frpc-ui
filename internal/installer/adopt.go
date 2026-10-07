@@ -126,7 +126,7 @@ func adoptionFiles(r AdoptionRequest) []templates.File {
 	snapshot := filepath.Join(r.Root, "observe", "snapshot.json")
 	web := fmt.Sprintf("[Unit]\nDescription=FRP Console existing deployment UI\nAfter=network-online.target\n\n[Service]\nUser=%s\nGroup=%s\nExecStart=%s/bin/frp-console --data %s/data --observed-snapshot %s --listen %s\nRestart=on-failure\nRestartSec=2\nNoNewPrivileges=true\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n", r.Name, r.Name, r.Root, r.Root, snapshot, r.Listen)
 	collector := fmt.Sprintf("[Unit]\nDescription=FRP Console read-only collection\n\n[Service]\nType=oneshot\nUser=root\nExecStart=%s/bin/frp-console observe --profile %s --out %s\nTimeoutStartSec=55\nNoNewPrivileges=true\nProtectSystem=strict\nProtectHome=read-only\nReadWritePaths=%s/observe\nUMask=0077\n", r.Root, profile, snapshot, r.Root)
-	timer := fmt.Sprintf("[Unit]\nDescription=Refresh FRP Console observation\n\n[Timer]\nOnBootSec=10\nOnUnitInactiveSec=%ds\nUnit=%s-collect.service\n\n[Install]\nWantedBy=timers.target\n", r.Interval, r.Name)
+	timer := fmt.Sprintf("[Unit]\nDescription=Refresh FRP Console observation\n\n[Timer]\nOnBootSec=10\nOnUnitInactiveSec=%ds\nAccuracySec=1s\nUnit=%s-collect.service\n\n[Install]\nWantedBy=timers.target\n", r.Interval, r.Name)
 	paths := adoptionPaths(r)
 	b, _ := json.MarshalIndent(r.Profile, "", "  ")
 	return []templates.File{{Path: profile, Content: string(b)}, {Path: paths[0], Content: web}, {Path: paths[1], Content: collector}, {Path: paths[2], Content: timer}}

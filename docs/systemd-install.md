@@ -8,7 +8,7 @@
 curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | sudo bash
 ```
 
-root 可直接 `| bash`。入口默认固定 `v0.1.0-preview.6`，先选择新安装或已有 FRPS 只读接入；也可传 `--mode new` / `--mode adopt`。可通过 `bash -s -- --version vX.Y.Z` 选择兼容的已发布版本；接入安装需 preview.6 或以后版本。默认 Console 使用 `--source gitee`；可选 `--source github`。`--verify-only` 不启动向导：默认验证新安装的 Console 与 FRP，配合 `--mode adopt` 仅验证 Console。preview.3 原版入口假设 Gitee 接受 FRP 附件，已被实际验证否定；preview.1/2 没有 FRP_VERSION，使用其原版入口。
+root 可直接 `| bash`。入口默认固定 `v0.1.0-preview.7`，先选择新安装或已有 FRPS 只读接入；也可传 `--mode new` / `--mode adopt`。可通过 `bash -s -- --version vX.Y.Z` 选择兼容的已发布版本；接入安装需 preview.7 或以后版本。默认 Console 使用 `--source gitee`；可选 `--source github`。`--verify-only` 不启动向导：默认验证新安装的 Console 与 FRP，配合 `--mode adopt` 仅验证 Console。preview.3 原版入口假设 Gitee 接受 FRP 附件，已被实际验证否定；preview.1/2 没有 FRP_VERSION，使用其原版入口。
 
 Console 与 SHA256SUMS 从选定 Release 经 HTTPS 下载；新安装额外下载 FRP_VERSION 和官方 FRP。Gitee API 实际以 `malicious file detected and rejected` 拒绝官方 FRP 归档，所以选 Gitee 时 FRP 明确从官方 GitHub 下载；不使用第三方代理。GitHub 不可达时指定 `bash -s -- --frp-archive /path/to/frp_0.71.0_linux_amd64.tar.gz`，入口复制并校验该普通本地文件，原文件不变。摘要检查用于发现损坏或不匹配，不是独立签名证明。Console 归档只允许单个普通 `frp-console` 文件；FRP 还由 Go 安装器核对官方固定摘要。无终端、缺少依赖、不支持系统/架构或校验失败时停止，不安装系统依赖、不修改已有服务。
 
