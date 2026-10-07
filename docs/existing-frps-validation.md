@@ -17,3 +17,9 @@
 Docker inspect/logs 路径目前使用固定 argv 的模拟测试，没有真实 Docker 容器或云端接入验收。Nginx 使用磁盘配置 fixture，仅验收解析与范围控制，没有运行 Nginx、验证证书或证明当前 worker 加载一致。日志/流量来自采集快照，非实时推送。
 
 未在 arm64 实机执行、未做生产权限适配，尚未完成图形浏览器交互验收。以上为发布前隔离验证；preview.5 为包含本功能的目标发布版本，原 preview.4 附件保留。发布和下载摘要校验须另行完成，不能从编译结果推断发布成功。只读接入不开放配置写接管、FRP 运行控制、Nginx 加载或主备管理。
+
+## preview.5 发布包验证
+
+2026-10-07：GitHub Preview release 工作流 [37586259290](https://github.com/cong86/frpc-ui/actions/runs/37586259290) 成功发布非草稿预览版，BUILD_INFO 绑定 `99fcde09f65d285c9016e69e34bbcd93d416ddfa`。下载后对 amd64/arm64 Console 归档、install.sh、BUILD_INFO.txt 与 FRP_VERSION 按原 SHA256SUMS 验证通过；两个归档均只包含一个常规程序文件。
+
+使用实际发布的 Linux amd64 程序重跑上述真实 FRPS/FRPC 隔离验证，通过只读采集、低权限登录、脱敏、写入拒绝、快照过期、配置哈希/PID 不变与 Console 退出后隧道持续可用。下载通过本机 Windows 代理路径验证；本机 WSL 直接访问 GitHub 超时，未据此宣称直接 curl 在线验证成功。未修改生产实例。Gitee 标签与附件由独立 Sync Gitee 工作流确认，不从主分支源码同步推断附件已可下载。
