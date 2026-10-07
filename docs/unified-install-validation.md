@@ -32,4 +32,12 @@ preview.6 的 GitHub 公网下载与摘要通过，但发布二进制复测遇�
 
 ## 验收边界
 
-Docker 仅模拟固定读取命令，Nginx 仅解析磁盘配置与日志 fixture；没有真实 Nginx worker 验收、图形交互、arm64 实机或生产权限测试。已有模式不自动开启 FRPS 管理 API、不迁移旧 INI、不写入原配置、不执行反代加载。完整写接管和升级仍未完成。公网 Release 与 Gitee 下载结果在发布后另行核验。
+Docker 仅模拟固定读取命令，Nginx 仅解析磁盘配置与日志 fixture；没有真实 Nginx worker 验收、图形交互、arm64 实机或生产权限测试。已有模式不自动开启 FRPS 管理 API、不迁移旧 INI、不写入原配置、不执行反代加载。完整写接管和升级仍未完成。
+
+## preview.7 公网发布核验
+
+GitHub [Release](https://github.com/cong86/frpc-ui/releases/tag/v0.1.0-preview.7) 与 [发布流水线](https://github.com/cong86/frpc-ui/actions/runs/37592603475) 成功，BUILD_INFO 绑定 `a67374fdd55a5cc9e4ed6d01f7181b7506f0466a`。发布清单全部摘要核对通过，两架构 Console 实际下载；官方 FRP 原归档与固定摘要匹配。实际发布 amd64 二进制再次完整验证新安装取消/两端安装/认证，以及已有接入、timer 刷新、AccuracyUSec=1s、低权限和原隧道不变。
+
+Gitee 原生镜像 main 与 preview.7 标签已匹配此提交。GitHub [附件同步工作流](https://github.com/cong86/frpc-ui/actions/runs/37592696382) 在等待标签的 API GET 阶段因 URLError 失败，未上传附件。本机使用已授权凭据补齐 6 个受支持附件，并实际从 Gitee 下载，逐项确认 SHA-256 与 GitHub 字节一致；不是自动附件同步成功。Gitee 不接受官方 FRP 归档的限制保持不变。
+
+Linux 实际执行 GitHub 与 Gitee 的 `curl | bash -s -- --verify-only`：接入模式只下载 Console，新安装模式使用已核对官方本地缓存，均通过摘要检查。测试网络通过本机代理访问，不证明用户云服务器网络可达；目标云服务器尚未部署。
