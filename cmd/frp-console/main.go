@@ -18,11 +18,19 @@ import (
 	"github.com/cong86/frpc-ui/internal/filelock"
 	"github.com/cong86/frpc-ui/internal/installer"
 	"github.com/cong86/frpc-ui/internal/managed"
+	"github.com/cong86/frpc-ui/internal/observe"
 	"github.com/cong86/frpc-ui/internal/server"
 	"github.com/cong86/frpc-ui/internal/state"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "observe" {
+		if e := observe.CLI(os.Args[2:]); e != nil {
+			log.Fatal(e)
+		}
+		fmt.Println("Read-only observation snapshot updated; existing services unchanged.")
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "install" {
 		if e := installer.CLI(os.Args[2:]); e != nil {
 			log.Fatal(e)
@@ -36,7 +44,16 @@ func main() {
 	client := flag.String("frpc-config", "", "read-only imported client TOML")
 	service := flag.String("frps-config", "", "read-only imported server TOML")
 	manifestPath := flag.String("manifest", "", "root-owned manifest for exclusively installed systemd instances")
+	observedPath := flag.String("observed-snapshot", "", "root-owned redacted snapshot of an existing FRPS/Nginx deployment")
 	flag.Parse()
+	if *observedPath != "" {
+		if *manifestPath != "" || *demo || *client != "" || *service != "" {
+			log.Fatal("observed snapshot cannot be combined with managed/demo/import configurations")
+		}
+		if _, e := observe.LoadSnapshot(*observedPath); e != nil {
+			log.Fatal(e)
+		}
+	}
 	var installed *managed.Manifest
 	if *manifestPath != "" {
 		var e error
@@ -132,6 +149,7 @@ func main() {
 	}
 	s := server.New(st, m, *listen)
 	s.Runtime = &managed.Collector{Manifest: installed}
+	s.ObservedPath = *observedPath
 	httpServer := &http.Server{Addr: *listen, Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: 60 * time.Second}
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cong86/frpc-ui/internal/config"
 	"github.com/cong86/frpc-ui/internal/managed"
+	"github.com/cong86/frpc-ui/internal/observe"
 	"github.com/cong86/frpc-ui/internal/state"
 	"github.com/cong86/frpc-ui/internal/templates"
 	"golang.org/x/crypto/bcrypt"
@@ -30,6 +31,7 @@ type Server struct {
 	Manager      *config.Manager
 	Host         string
 	Runtime      *managed.Collector
+	ObservedPath string
 	observations map[string]managed.Observation
 	mu           sync.Mutex
 	attempts     map[string][]time.Time
@@ -235,6 +237,19 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 	path := r.URL.Path
+	if path == "/api/observed" && r.Method == "GET" {
+		if s.ObservedPath == "" {
+			reply(w, 200, map[string]any{"configured": false})
+			return
+		}
+		v, e := observe.LoadSnapshot(s.ObservedPath)
+		if e != nil {
+			fail(w, errors.New("read-only snapshot unavailable; collect again on the host"))
+			return
+		}
+		reply(w, 200, map[string]any{"configured": true, "snapshot": v})
+		return
+	}
 	if path == "/api/logout" && r.Method == "POST" {
 		_, _ = s.State.DB.Exec("DELETE FROM sessions WHERE hash=?", hash(sess.Token))
 		http.SetCookie(w, &http.Cookie{Name: s.cookieName(), Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: -1})
@@ -243,6 +258,18 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, sess session) {
 	}
 	if path == "/api/instances" && r.Method == "GET" {
 		out := []any{}
+		if s.ObservedPath != "" {
+			v, e := observe.LoadSnapshot(s.ObservedPath)
+			if e != nil {
+				fail(w, errors.New("read-only snapshot unavailable; collect again on the host"))
+				return
+			}
+			checks := map[string]string{}
+			for k, c := range v.Runtime.Layers {
+				checks[k] = c.Status
+			}
+			out = append(out, map[string]any{"instance": map[string]any{"id": "frps", "role": "frps", "managed": false}, "config": v.Config, "verification": checks, "runtime": v.Runtime, "observed": true})
+		}
 		for _, i := range s.Manager.Instances {
 			d, e := s.Manager.Read(i.ID)
 			if e != nil {
