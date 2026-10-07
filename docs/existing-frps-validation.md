@@ -23,3 +23,9 @@ Docker inspect/logs 路径目前使用固定 argv 的模拟测试，没有真实
 2026-10-07：GitHub Preview release 工作流 [37586259290](https://github.com/cong86/frpc-ui/actions/runs/37586259290) 成功发布非草稿预览版，BUILD_INFO 绑定 `99fcde09f65d285c9016e69e34bbcd93d416ddfa`。下载后对 amd64/arm64 Console 归档、install.sh、BUILD_INFO.txt 与 FRP_VERSION 按原 SHA256SUMS 验证通过；两个归档均只包含一个常规程序文件。
 
 使用实际发布的 Linux amd64 程序重跑上述真实 FRPS/FRPC 隔离验证，通过只读采集、低权限登录、脱敏、写入拒绝、快照过期、配置哈希/PID 不变与 Console 退出后隧道持续可用。下载通过本机 Windows 代理路径验证；本机 WSL 直接访问 GitHub 超时，未据此宣称直接 curl 在线验证成功。未修改生产实例。Gitee 标签与附件由独立 Sync Gitee 工作流确认，不从主分支源码同步推断附件已可下载。
+
+## 国内镜像与在线入口
+
+同日，原生 Gitee 镜像标签到达前，第一次附件同步等待十分钟超时。标签匹配后重跑，海外 runner 已上传 BUILD_INFO.txt 和 FRP_VERSION，但程序包 POST 超时；检查远端实际附件后，从本机使用既有授权凭据及同一同步脚本校验已有文件，再补齐缺失附件，不改写源码、标签或已有附件。
+
+Gitee 六个发布附件重新下载后与 GitHub 原始字节全部一致，包括 SHA256SUMS 和两个架构的 Console。WSL 经已验证的 Windows 网关代理分别执行 GitHub 安装脚本和 Gitee 原始 `curl | bash` 入口的 `--verify-only --frp-archive` 检查，均下载 preview.5 并通过摘要校验；未执行安装，也未修改生产。官方 FRP 仍由官方 GitHub或经固定摘要验证的本地原版归档提供。
