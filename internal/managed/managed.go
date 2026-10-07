@@ -378,6 +378,19 @@ func adminGet(ctx context.Context, values map[string]any, path string, out any) 
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out)
 }
+
+// ReadServerAPI is deliberately limited to read-only, fixed FRPS routes.
+func ReadServerAPI(ctx context.Context, d *config.Document, path string, out any) error {
+	switch path {
+	case "/api/serverinfo", "/api/clients", "/api/proxy/tcp", "/api/proxy/udp", "/api/proxy/http", "/api/proxy/https":
+		return adminGet(ctx, d.Values, path, out)
+	default:
+		return errors.New("unsupported observation route")
+	}
+}
+
+// TrustedFile verifies administrator-controlled metadata without following links.
+func TrustedFile(path string) error { return trusted(path) }
 func ProbeOnce(ctx context.Context, p Probe) error {
 	if e := ValidateProbe(p); e != nil {
 		return e

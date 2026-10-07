@@ -18,7 +18,11 @@ func trusted(path string) error {
 	if !ok || s.Uid != 0 || !st.Mode().IsRegular() || st.Mode().Perm()&0022 != 0 {
 		return errors.New("managed metadata and binary must be root-owned regular files, not writable by group or others")
 	}
-	for p := filepath.Dir(path); ; p = filepath.Dir(p) {
+	return TrustedDirectory(filepath.Dir(path))
+}
+
+func TrustedDirectory(path string) error {
+	for p := path; ; p = filepath.Dir(p) {
 		st, e := os.Lstat(p)
 		if e != nil {
 			return e

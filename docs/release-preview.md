@@ -1,4 +1,10 @@
-FRP Console systemd 安装与运行观测预览版，第一版尚未完成。仅 Debian/Ubuntu 原生新安装；提供 Linux amd64/arm64 程序，前端已嵌入。
+FRP Console v0.1.0-preview.5：systemd 新安装与已有 FRPS/Nginx 只读观测预览版，第一版尚未完成。提供 Linux amd64/arm64 程序，前端已嵌入。
+
+新增 `observe` 管理员采集 CLI 和 `--observed-snapshot` 模式：显示已有 FRPS 的脱敏配置、进程、认证、代理与客户端、累计流量和采集间隔平均速率；读取 Nginx HTTP 站点/include/upstream、HTTPS/WebSocket 配置，以及有限日志摘要。低权限网页只读脱敏快照，不持有 Docker socket、不重装 FRP、不写源配置、不重载服务。快照超过 120 秒时撤销健康和速率结论。
+
+已有部署接入按仓库 `docs/existing-frps.md` 单独配置，不重新运行新安装向导。旧安装不会自动升级；当前没有自动升级功能。只读接入无需下载新的官方 FRP。
+
+验证：Go 测试、go vet、前端类型检查/构建通过，12 项采集测试在 Windows/Linux amd64 通过，amd64/arm64 构建通过。真实 FRPS/FRPC 隔离隧道验证了低权限登录、脱敏、写入拒绝、源配置/PID 不变、快照过期，以及 Console 退出后隧道持续可用。Docker 目前仅模拟固定命令测试，Nginx 为磁盘 fixture 解析，未验收真实 worker、生产权限或图形交互。
 
 下载入口检测系统及架构，从本 Release 下载对应归档和 SHA256SUMS，校验后启动交互向导。向导预览和确认后创建独立 FRPC/FRPS 与 Console 服务。UI 回环监听，管理员由首次网页访问初始化。
 

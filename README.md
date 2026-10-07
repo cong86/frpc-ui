@@ -14,6 +14,7 @@ FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序�
 - 修订号冲突拒绝、操作幂等、系统文件锁、原子写入、加密快照、恢复预览。
 - 启动时核对未完成写入记录，不盲目重放。
 - systemd/Compose 部署资源预览、Nginx HTTPS/WebSocket 模板生成。
+- 已有 FRPS 的只读采集与 UI：配置、官方 API 代理/客户端/流量、Docker/systemd 元数据、Nginx 站点/include/upstream 与脱敏日志摘要。管理员生成快照，网页只读快照，不持有 Docker socket。见 [接入说明](docs/existing-frps.md) 和 [验收记录](docs/existing-frps-validation.md)。
 
 ## 当前限制
 
@@ -22,9 +23,10 @@ FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序�
 - `--frpc-config` / `--frps-config` 导入 TOML 始终只读；不迁移生产配置，不执行主备或同步脚本。
 - 多行字符串、includes、环境模板、已有 start 过滤与无法可靠脱敏的写法只读。
 - 嵌套代理表格不支持表单修改；可在支持脱敏的高级编辑视图中编辑。
-- 旧 INI 迁移、生产接管、同角色多实例、网页安装执行、运行应用与日志、Compose 自动安装、Nginx 校验/加载、升级/卸载尚未实现。
+- 旧 INI 迁移、已有部署写接管、同角色多实例、网页安装执行、运行应用、新安装实例日志、Compose 自动安装、Nginx 校验/加载、升级/卸载尚未实现。
 - 部署模板含明确凭据占位符，Compose 镜像摘要固定待实现；不能直接用于生产。
 - 无清单的 demo/导入保持运行未验证。新安装显示实测层级；未登记探针或证据不足仍未验证。运行结果描述当前进程和固定登记目标，不证明离线修改已应用或全部参数与文件相同。
+- 从 preview.5 起，发布程序包含 `observe` 和 `--observed-snapshot` 独立只读接入模式，显示采集时间、过期状态及分层证据；需按 [接入说明](docs/existing-frps.md) 单独配置采集。
 
 完整规格与开发清单见 [docs/v1-spec.md](docs/v1-spec.md)。
 
@@ -43,6 +45,8 @@ curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | s
 ```
 
 本地归档也必须通过发布摘要与 Go 安装器的官方固定摘要检查；采用缓存时无需访问 GitHub。可用 `--source github` 将 Console 下载源切回 GitHub。选择角色、填写配置、预览并确认后才安装。无需预装 Go、Node.js；需要 Bash、curl、tar、sha256sum 和运行中的 systemd。
+
+一键入口默认下载 preview.5，用于独立新安装；已有部署只读接入请直接使用发布程序并按 [接入说明](docs/existing-frps.md) 配置，不重新运行新安装向导。现有安装不会自动升级。
 
 只检查下载和摘要、不安装：
 
