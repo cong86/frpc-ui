@@ -135,6 +135,10 @@ func adoptionWizard(reader *bufio.Reader, out io.Writer) (AdoptionRequest, error
 }
 
 func adoptionWizardWithDiscovery(reader *bufio.Reader, out io.Writer, discover func(context.Context, string, observe.Target) observe.Discovery) (AdoptionRequest, error) {
+	return adoptionWizardWithLookups(reader, out, discover, observe.DetectExistingRuntime)
+}
+
+func adoptionWizardWithLookups(reader *bufio.Reader, out io.Writer, discover func(context.Context, string, observe.Target) observe.Discovery, detectRuntime func(context.Context, string) observe.RuntimeDiscovery) (AdoptionRequest, error) {
 	r := AdoptionRequest{Profile: observe.Profile{Version: 1}}
 	var inputError error
 	ask := func(label, def string) string {
@@ -157,20 +161,43 @@ func adoptionWizardWithDiscovery(reader *bufio.Reader, out io.Writer, discover f
 	r.Root = ask("新的管理程序目录", "/opt/frp-console-observer")
 	r.Listen = ask("管理页面回环地址", "127.0.0.1:18745")
 	r.Interval, _ = strconv.Atoi(ask("采集间隔秒数（10..60）", "30"))
-	r.Profile.Config = ask("已有 FRPS TOML 的宿主机绝对路径（留空自动查找）", "")
+	r.Profile.Config = ask("已有 FRPS 配置文件的宿主机绝对路径（TOML/旧 INI，留空自动查找）", "")
 	askRuntime := func(label string) observe.Target {
-		kind := choice(ask(label+"方式：1 原生服务 / 2 Docker 容器 / 3 未知", "1"), map[string]string{"1": "systemd", "原生服务": "systemd", "2": "docker", "容器": "docker", "3": "unknown", "未知": "unknown"})
-		if kind == "unknown" {
-			return observe.Target{}
-		}
-		name := "frps.service"
+		base := "frps"
 		if strings.HasPrefix(label, "Nginx") {
-			name = "nginx.service"
+			base = "nginx"
 		}
-		if kind == "docker" {
-			name = strings.TrimSuffix(name, ".service")
+		selection := ask(label+"方式：0 自动识别 / 1 原生服务 / 2 Docker 容器 / 3 未知", "0")
+		if selection == "0" && inputError == nil {
+			found := detectRuntime(context.Background(), base)
+			for _, issue := range found.Issues {
+				fmt.Fprintln(out, issue)
+			}
+			if len(found.Candidates) == 1 && len(found.Issues) == 0 {
+				target := found.Candidates[0]
+				fmt.Fprintf(out, "已识别默认目标：%s · %s（仅登记信息，不代表进程正常）\n", map[string]string{"docker": "Docker 容器", "systemd": "原生服务"}[target.Kind], target.Name)
+				target.Name = ask(label+"单元或容器名称", target.Name)
+				return target
+			}
+			fmt.Fprintln(out, "未找到唯一且可确认的默认运行目标；自定义名称请手动指定。")
+			selection = ask(label+"方式：1 原生服务 / 2 Docker 容器 / 3 未知", "")
 		}
-		return observe.Target{Kind: kind, Name: ask(label+"单元或容器名称", name)}
+		for inputError == nil {
+			kind := choice(selection, map[string]string{"1": "systemd", "原生服务": "systemd", "2": "docker", "容器": "docker", "3": "unknown", "未知": "unknown"})
+			if kind == "unknown" {
+				return observe.Target{}
+			}
+			if kind == "systemd" || kind == "docker" {
+				name := base
+				if kind == "systemd" {
+					name += ".service"
+				}
+				return observe.Target{Kind: kind, Name: ask(label+"单元或容器名称", name)}
+			}
+			fmt.Fprintln(out, "运行方式无效，请重新选择。")
+			selection = ask(label+"方式：1 原生服务 / 2 Docker 容器 / 3 未知", "")
+		}
+		return observe.Target{}
 	}
 	r.Profile.Runtime = askRuntime("FRPS 运行")
 	selectFound := func(role string, target observe.Target) *observe.DiscoveredConfig {
@@ -217,8 +244,8 @@ func adoptionWizardWithDiscovery(reader *bufio.Reader, out io.Writer, discover f
 		}
 	}
 	for inputError == nil && !filepath.IsAbs(r.Profile.Config) {
-		fmt.Fprintln(out, "FRPS 配置是必填项，请使用宿主机上的 TOML 文件绝对路径；不要填写容器内部路径。")
-		r.Profile.Config = ask("已有 FRPS TOML 的宿主机绝对路径（必填）", "")
+		fmt.Fprintln(out, "FRPS 配置是必填项，请使用宿主机上的 TOML 或旧 INI 文件绝对路径；不要填写容器内部路径。")
+		r.Profile.Config = ask("已有 FRPS 配置文件的宿主机绝对路径（必填）", "")
 	}
 	frpsLog := ask("FRPS 日志文件（空值使用已登记服务日志）", "")
 	if frpsLog != "" {

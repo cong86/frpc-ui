@@ -59,6 +59,19 @@ func TestDockerDiscoveryMapsExactFileBeforeDirectory(t *testing.T) {
 		t.Fatal("mount fallback ambiguous or missing", got)
 	}
 }
+
+func TestDiscoveryAcceptsLegacyINIHostFile(t *testing.T) {
+	frps, _, _, _ := discoveryFiles(t)
+	legacy := filepath.Join(filepath.Dir(frps), "frps.ini")
+	if e := os.WriteFile(legacy, []byte("[common]\nbind_port=7000\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	d := dockerDiscovery{Configs: []string{"/frp/frps.ini"}, Mounts: []discoveredMount{{"bind", legacy, "/frp/frps.ini"}}}
+	found := discoverExisting(context.Background(), "frps", Target{"docker", "frps"}, discoveryRunner(t, d), os.Stat)
+	if len(found.Candidates) != 1 || found.Candidates[0].Path != legacy {
+		t.Fatal("valid legacy candidate rejected")
+	}
+}
 func TestNginxDiscoveryRetainsSeparateConfigurationMountsAndLogs(t *testing.T) {
 	_, nginx, confd, logs := discoveryFiles(t)
 	d := dockerDiscovery{Mounts: []discoveredMount{{"bind", nginx, "/etc/nginx/nginx.conf"}, {"bind", confd, "/etc/nginx/conf.d"}, {"bind", logs, "/var/log/nginx"}, {"bind", logs, "/etc/nginx/certs"}, {"bind", logs, "/run/php"}}}

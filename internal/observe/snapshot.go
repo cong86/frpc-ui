@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -159,7 +160,7 @@ func Collect(ctx context.Context, p Profile, run Runner) (Snapshot, error) {
 	m := config.Manager{Instances: map[string]config.Instance{"frps": {ID: "frps", Role: "frps", Path: p.Config}}}
 	d, e := m.Read("frps")
 	if e != nil {
-		return Snapshot{}, errors.New("FRPS TOML 配置无法读取或解析")
+		return Snapshot{}, fmt.Errorf("FRPS 配置无法读取或解析：%w", e)
 	}
 	s := collectDocument(ctx, p, d, run)
 	// Discard this collection if the authoritative configuration changed.

@@ -38,10 +38,10 @@ FRP Console 第一版开发仓库。Go + Vue 3/TypeScript，前端嵌入程序�
 curl -fsSL https://gitee.com/wangcong886/frpc-ui/raw/main/scripts/install.sh | sudo bash
 ```
 
-入口检测系统和架构，默认下载 preview.9，先选择操作模式，再下载并校验 SHA-256：
+入口检测系统和架构，默认下载 preview.10，先选择操作模式，再下载并校验 SHA-256：
 
 - **新安装**：选择 FRPC / FRPS / 两者、填写连接参数与 Token，预览并确认后安装独立 FRP 与 Console 服务。
-- **已有 FRPS 只读接入**：填写现有 TOML 路径、systemd 单元或 Docker 容器名、Nginx 配置与日志路径，预览并确认后安装低权限 UI 和定时采集服务。此模式只下载 Console，无需下载或重装官方 FRP。未启用的管理 API 保持未验证，程序不自动修改原配置。
+- **已有 FRPS 只读接入**：填写现有 TOML 或旧 INI 路径（按内容识别）、systemd 单元或 Docker 容器名、Nginx 配置与日志路径，预览并确认后安装低权限 UI 和定时采集服务。此模式只下载 Console，无需下载或重装官方 FRP。未启用的管理 API 保持未验证，程序不自动修改原配置。
 
 可用 `--mode new` / `--mode adopt` 直接选择模式。默认从 Gitee 下载 Console；新安装的官方 FRP 从官方 GitHub 下载。Gitee 实际拒绝官方 FRP 附件，无法提供完整在线镜像。新安装时 GitHub 不可达，先将对应架构的官方原版 FRP 归档传到目标机，再使用本地缓存：
 

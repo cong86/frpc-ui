@@ -53,10 +53,6 @@ func discoverExisting(ctx context.Context, role string, target Target, run Runne
 		if !filepath.IsAbs(p) || seen[p] || (!regular(p) && (n == nil || n.Context != "http-fragments" || !directory(filepath.Dir(p)))) {
 			return
 		}
-		if role == "frps" && strings.EqualFold(filepath.Ext(p), ".ini") {
-			result.Issues = append(result.Issues, "检测到旧 INI 配置；当前只读接入需要 TOML，不自动迁移原配置。")
-			return
-		}
 		seen[p] = true
 		result.Candidates = append(result.Candidates, DiscoveredConfig{Path: p, Source: source, Nginx: n, Logs: logs})
 	}
@@ -101,6 +97,7 @@ func discoverExisting(ctx context.Context, role string, target Target, run Runne
 					}
 					if directory(m.Source) && (m.Destination == "/frp" || m.Destination == "/etc/frp" || m.Destination == "/etc/frps") {
 						add(filepath.Join(m.Source, "frps.toml"), "容器配置目录中的候选文件（需确认）", nil, nil)
+						add(filepath.Join(m.Source, "frps.ini"), "容器配置目录中的候选文件（旧 INI 仅只读；需确认）", nil, nil)
 					}
 				}
 			}
@@ -181,7 +178,7 @@ func discoverExisting(ctx context.Context, role string, target Target, run Runne
 		paths := configArguments(string(raw))
 		if len(paths) == 0 {
 			if role == "frps" {
-				paths = []string{"/etc/frp/frps.toml", "/etc/frps/frps.toml", "/etc/frps.toml"}
+				paths = []string{"/etc/frp/frps.toml", "/etc/frps/frps.toml", "/etc/frps.toml", "/etc/frp/frps.ini", "/etc/frps/frps.ini", "/etc/frps.ini"}
 			} else {
 				paths = []string{"/etc/nginx/nginx.conf"}
 			}
