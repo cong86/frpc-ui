@@ -65,8 +65,17 @@ func checkTarget(t Target) error {
 	return nil
 }
 func (p Profile) Validate() error {
-	if p.Version != 1 || !filepath.IsAbs(p.Config) || len(p.Logs) > 12 {
-		return errors.New("采集配置无效")
+	if p.Version != 1 {
+		return errors.New("采集配置版本不支持")
+	}
+	if p.Config == "" {
+		return errors.New("缺少已有 FRPS 配置路径：请填写宿主机上的 TOML 文件绝对路径，不能使用容器内部路径")
+	}
+	if !filepath.IsAbs(p.Config) {
+		return errors.New("FRPS 配置必须使用宿主机绝对路径")
+	}
+	if len(p.Logs) > 12 {
+		return errors.New("日志来源不能超过 12 个")
 	}
 	if e := checkTarget(p.Runtime); e != nil {
 		return e

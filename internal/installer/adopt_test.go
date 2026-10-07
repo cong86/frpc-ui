@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -13,6 +14,65 @@ import (
 
 	"github.com/cong86/frpc-ui/internal/observe"
 )
+
+func TestAdoptionWizardConfirmsFoundConfigAndSeparateNginxMounts(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX paths verified on Linux")
+	}
+	input := "\n\n\n\n\n2\n\n1\n\n\n2\n\n1\n\n\n"
+	root := t.TempDir()
+	var roles []string
+	discover := func(_ context.Context, role string, target observe.Target) observe.Discovery {
+		roles = append(roles, role)
+		if target.Kind != "docker" || target.Name != role {
+			t.Fatal("wrong lookup target", target)
+		}
+		if role == "frps" {
+			return observe.Discovery{Candidates: []observe.DiscoveredConfig{{Path: filepath.Join(root, "frps.toml"), Source: "test mount"}}}
+		}
+		n := &observe.NginxProfile{Entry: filepath.Join(root, "nginx.conf"), Prefix: "/etc/nginx", Roots: []string{root}, Mounts: []observe.Mount{{Inside: "/etc/nginx/nginx.conf", Host: filepath.Join(root, "nginx.conf")}, {Inside: "/etc/nginx/conf.d", Host: filepath.Join(root, "conf.d")}}, Runtime: target}
+		return observe.Discovery{Candidates: []observe.DiscoveredConfig{{Path: n.Entry, Nginx: n, Logs: []observe.LogSource{{Kind: "file", Name: filepath.Join(root, "access.log"), Format: "nginx-access"}}}}}
+	}
+	var output strings.Builder
+	r, e := adoptionWizardWithDiscovery(bufio.NewReader(strings.NewReader(input)), &output, discover)
+	if e != nil || len(roles) != 2 || r.Profile.Config != filepath.Join(root, "frps.toml") || r.Profile.Nginx == nil || len(r.Profile.Nginx.Mounts) != 2 || len(r.Profile.Logs) != 3 || r.Profile.Logs[1].Kind != "file" || r.Profile.Logs[2].Kind != "docker" {
+		t.Fatal(r, e, output.String())
+	}
+	if !strings.Contains(output.String(), "确认使用") || !strings.Contains(output.String(), "配置挂载") {
+		t.Fatal("scope not shown")
+	}
+}
+func TestAdoptionWizardMissingPathFallsBackAndDoesNotAcceptBlank(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX paths verified on Linux")
+	}
+	input := "\n\n\n\n\n2\n\n\nrelative.toml\n/srv/frp/frps.toml\n\n0\n"
+	var output strings.Builder
+	r, e := adoptionWizardWithDiscovery(bufio.NewReader(strings.NewReader(input)), &output, func(context.Context, string, observe.Target) observe.Discovery {
+		return observe.Discovery{Issues: []string{"未找到配置"}}
+	})
+	if e != nil || r.Profile.Config != "/srv/frp/frps.toml" || r.Profile.Nginx != nil || strings.Count(output.String(), "FRPS 配置是必填项") != 3 {
+		t.Fatal(r, e, output.String())
+	}
+	_, e = adoptionWizardWithDiscovery(bufio.NewReader(strings.NewReader("\n\n\n\n\n2\n\n")), &output, func(context.Context, string, observe.Target) observe.Discovery { return observe.Discovery{} })
+	if e == nil {
+		t.Fatal("EOF accepted as installation input")
+	}
+}
+
+func TestAdoptionWizardMultipleCandidatesRequireSelection(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX paths verified on Linux")
+	}
+	input := "\n\n\n\n\n2\n\n9\n2\n\n0\n"
+	var output strings.Builder
+	r, e := adoptionWizardWithDiscovery(bufio.NewReader(strings.NewReader(input)), &output, func(context.Context, string, observe.Target) observe.Discovery {
+		return observe.Discovery{Candidates: []observe.DiscoveredConfig{{Path: "/first/frps.toml"}, {Path: "/selected/frps.toml"}}}
+	})
+	if e != nil || r.Profile.Config != "/selected/frps.toml" || !strings.Contains(output.String(), "编号无效") {
+		t.Fatal(r, e, output.String())
+	}
+}
 
 func adoptionRequest() AdoptionRequest {
 	return AdoptionRequest{Name: "frp-console-observer", Root: "/opt/frp-console-observer", Listen: "127.0.0.1:18745", Interval: 30, Profile: observe.Profile{Version: 1, Config: "/srv/frp/frps.toml", Runtime: observe.Target{Kind: "docker", Name: "frps"}}}

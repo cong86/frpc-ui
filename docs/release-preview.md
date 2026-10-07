@@ -1,4 +1,6 @@
-FRP Console v0.1.0-preview.8：统一一键新安装与已有 FRPS/Nginx 只读管理安装入口。第一版尚未完成，提供嵌入前端的 Linux amd64/arm64 程序。
+FRP Console v0.1.0-preview.9：统一一键新安装与已有 FRPS/Nginx 只读管理安装入口。第一版尚未完成，提供嵌入前端的 Linux amd64/arm64 程序。
+
+新增已有部署配置自动查找：FRPS/Nginx 路径留空可从选定 Docker 容器或 systemd 服务查找宿主机配置，候选、读取范围、挂载和日志来源需确认；支持手动填写及跳过 Nginx。修正空 FRPS 路径只报“采集配置无效”的问题，改为具体原因并重新输入。自定义 Nginx 前缀、仅容器内部配置等情况保留手动路径。
 
 本次将安装菜单、交互与错误提示、预检证据及网页状态、审计、配置说明统一为中文。角色、运行方式和 Nginx 配置类型支持中文编号选择，原英文输入和机器接口保持兼容。命令参数、协议和配置字段保留原标识。
 
@@ -12,6 +14,6 @@ FRP Console v0.1.0-preview.8：统一一键新安装与已有 FRPS/Nginx 只读�
 
 默认 Console 国内下载使用 Gitee；新安装的官方 FRP 从官方 GitHub 下载或传 `--frp-archive` 原版本地缓存，仍强制校验。Gitee 不接受官方 FRP 附件，完整国内在线镜像尚未实现。只读接入不需要官方 FRP 下载。源码/标签采用 Gitee 原生 Pull 镜像，发布附件独立同步。
 
-现有 Console 不会自动升级。完整写接管、配置运行应用/自动回滚、Compose 自动安装、Nginx 校验/加载和升级/卸载尚未开放。旧 preview.5 提供手动只读接入，使用本次入口需下载 preview.8。
+现有 Console 不会自动升级。完整写接管、配置运行应用/自动回滚、Compose 自动安装、Nginx 校验/加载和升级/卸载尚未开放。旧 preview.5 提供手动只读接入，使用本次入口需下载 preview.9。
 
 preview.7 修正接入 timer 的计时精度，显式设置 AccuracySec=1s，避免 systemd 默认一分钟合并窗口影响 10～60 秒采集间隔。preview.6 已被此版本替代；附件不覆盖。
